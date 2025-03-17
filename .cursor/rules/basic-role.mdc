@@ -1,0 +1,6 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+Do not modify features or make design changes that are excluded from the requirements.
