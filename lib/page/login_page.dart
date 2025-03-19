@@ -35,7 +35,12 @@ class _AuthPageState extends State<AuthPage> {
             password: _passwordController.text,
           );
         }
-        Navigator.push(context, MaterialPageRoute(builder: (context)=> MainPage()));
+        
+        // 스택을 남기지 않고 메인 페이지로 이동
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (context) => MainPage()),
+          (route) => false,
+        );
       } on FirebaseAuthException catch (e) {
         setState(() {
           _errorMessage = e.message ?? '알 수 없는 오류가 발생했습니다.';

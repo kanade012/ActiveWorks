@@ -11,6 +11,6 @@ void main() async {
   windowManager.setAlwaysOnTop(true);
   runApp(MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'timer',
+      title: 'activeworks',
       home: AuthPage()));
 }
