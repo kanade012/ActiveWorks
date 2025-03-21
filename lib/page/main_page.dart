@@ -28,7 +28,6 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
   final TextEditingController _meetingDataController = TextEditingController();
   String _reference = '';
   String _meetingData = '';
-  int _elapsedSeconds = 0;
   Timer? _timer;
   bool _isPlaying = false;
   bool _isPaused = false;
@@ -217,6 +216,7 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
       context: context,
       builder: (context) {
         return AlertDialog(
+          backgroundColor: Colors.white,
           title: Text('데이터 수정/삭제'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
@@ -238,7 +238,7 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: Text('취소'),
+              child: Text('취소', style: TextStyle(color: Colors.black),),
             ),
             TextButton(
               onPressed: () {
@@ -246,14 +246,14 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
                     _meetingDataController.text);
                 Navigator.pop(context);
               },
-              child: Text('수정'),
+              child: Text('수정', style: TextStyle(color: Colors.black),),
             ),
             TextButton(
               onPressed: () {
                 _deleteRecord(docId);
                 Navigator.pop(context);
               },
-              child: Text('삭제'),
+              child: Text('삭제', style: TextStyle(color: Colors.black),),
             ),
           ],
         );
@@ -360,54 +360,6 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
     });
   }
 
-  // 정렬 메뉴 표시
-  void _showSortMenu() {
-    showModalBottomSheet(
-      context: context,
-      builder: (BuildContext context) {
-        return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
-              ListTile(
-                title: Text('최신순'),
-                selected: _currentSortOption == SortOption.latest,
-                onTap: () {
-                  _changeSortOption(SortOption.latest);
-                  Navigator.pop(context);
-                },
-              ),
-              ListTile(
-                title: Text('오래된순'),
-                selected: _currentSortOption == SortOption.oldest,
-                onTap: () {
-                  _changeSortOption(SortOption.oldest);
-                  Navigator.pop(context);
-                },
-              ),
-              ListTile(
-                title: Text('기록 시간순'),
-                selected: _currentSortOption == SortOption.time,
-                onTap: () {
-                  _changeSortOption(SortOption.time);
-                  Navigator.pop(context);
-                },
-              ),
-              ListTile(
-                title: Text('날짜별'),
-                selected: _currentSortOption == SortOption.date,
-                onTap: () {
-                  _changeSortOption(SortOption.date);
-                  Navigator.pop(context);
-                },
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
   // 정렬 옵션 텍스트 반환
   String _getSortOptionText(SortOption option) {
     switch (option) {
@@ -459,81 +411,129 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
         child: Scaffold(
           // 작은 화면에서는 앱바 숨기기
           appBar: isSmallScreen ? null : AppBar(
-            title: Text('Main Page'),
+            backgroundColor: Color(0xFFF9FAFC), // 배경색 검정
+            title: Text('My workspace'),
+            // 스크롤 할 때 앱바 색이 변경되지 않도록 설정
+            scrolledUnderElevation: 0, // 스크롤 시 높이 효과 제거
+            shadowColor: Colors.transparent, // 그림자 색상 투명하게
+            elevation: 0, // 앱바 높이 효과 제거
+            forceMaterialTransparency: false, // 머티리얼 효과 제거
+            
             actions: [
-              // 정렬 버튼 추가
-              IconButton(
-                icon: Icon(Icons.sort),
-                onPressed: _showSortMenu,
+              // 정렬 버튼을 드롭다운으로 변경
+              PopupMenuButton<SortOption>(
+                color: Colors.white,
+                icon: Row(
+                  children: [
+                    Text('정렬 : ${_getSortOptionText(_currentSortOption)}',
+                      style: TextStyle(fontSize: 14, color: Colors.black)),
+                    Icon(Icons.arrow_drop_down, color: Colors.black),
+                  ],
+                ),
+                onSelected: (SortOption option) {
+                  _changeSortOption(option);
+                },
+                itemBuilder: (BuildContext context) => <PopupMenuEntry<SortOption>>[
+                  PopupMenuItem<SortOption>(
+                    value: SortOption.latest,
+                    child: Text('최신순', style: TextStyle(color: Colors.black)),
+                  ),
+                  PopupMenuItem<SortOption>(
+                    value: SortOption.oldest,
+                    child: Text('오래된순', style: TextStyle(color: Colors.black)),
+                  ),
+                  PopupMenuItem<SortOption>(
+                    value: SortOption.time,
+                    child: Text('기록 시간순', style: TextStyle(color: Colors.black)),
+                  ),
+                  PopupMenuItem<SortOption>(
+                    value: SortOption.date,
+                    child: Text('날짜별', style: TextStyle(color: Colors.black)),
+                  ),
+                ],
               ),
-              IconButton(
-                icon: Icon(Icons.menu),
-                onPressed: () {
-                  showModalBottomSheet(
-                    context: context,
-                    builder: (BuildContext context) {
-                      return SafeArea(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: <Widget>[
-                            ListTile(
-                              leading: Icon(Icons.logout),
-                              title: Text('로그아웃'),
-                              onTap: () {
-                                _logout();
-                                Navigator.pop(context); // Bottom sheet 닫기
-                              },
-                            ),
-                            ListTile(
-                              leading: Icon(Icons.group_add),
-                              title: Text('그룹생성'),
-                              onTap: () {
-                                Navigator.pop(context); // Bottom sheet 닫기
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) => CreateGroupPage(),
-                                  ),
-                                );
-                              },
-                            ),
-                            ListTile(
-                              leading: Icon(Icons.person_add),
-                              title: Text('그룹참가'),
-                              onTap: () {
-                                Navigator.pop(context); // Bottom sheet 닫기
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) => JoinGroupPage(),
-                                  ),
-                                );
-                              },
-                            ),
-                            ListTile(
-                              leading: Icon(Icons.groups),
-                              title: Text('그룹보기'),
-                              onTap: () {
-                                Navigator.pop(context); // Bottom sheet 닫기
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) => GroupListPage(),
-                                  ),
-                                );
-                              },
-                            ),
-                          ],
+              // 햄버거 메뉴를 PopupMenuButton으로 변경
+              PopupMenuButton<String>(
+                color: Colors.white,
+                icon: Icon(Icons.menu, color: Colors.black),
+                onSelected: (String value) {
+                  switch (value) {
+                    case 'logout':
+                      _logout();
+                      break;
+                    case 'create_group':
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => CreateGroupPage(),
                         ),
                       );
-                    },
-                  );
+                      break;
+                    case 'join_group':
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => JoinGroupPage(),
+                        ),
+                      );
+                      break;
+                    case 'view_groups':
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => GroupListPage(),
+                        ),
+                      );
+                      break;
+                  }
                 },
+                itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+                  PopupMenuItem<String>(
+                    value: 'logout',
+                    child: Row(
+                      children: [
+                        Icon(Icons.logout, color: Colors.black),
+                        SizedBox(width: 8),
+                        Text('로그아웃', style: TextStyle(color: Colors.black)),
+                      ],
+                    ),
+                  ),
+                  PopupMenuItem<String>(
+                    value: 'create_group',
+                    child: Row(
+                      children: [
+                        Icon(Icons.group_add, color: Colors.black),
+                        SizedBox(width: 8),
+                        Text('그룹생성', style: TextStyle(color: Colors.black)),
+                      ],
+                    ),
+                  ),
+                  PopupMenuItem<String>(
+                    value: 'join_group',
+                    child: Row(
+                      children: [
+                        Icon(Icons.person_add, color: Colors.black),
+                        SizedBox(width: 8),
+                        Text('그룹참가', style: TextStyle(color: Colors.black)),
+                      ],
+                    ),
+                  ),
+                  PopupMenuItem<String>(
+                    value: 'view_groups',
+                    child: Row(
+                      children: [
+                        Icon(Icons.groups, color: Colors.black),
+                        SizedBox(width: 8),
+                        Text('그룹보기', style: TextStyle(color: Colors.black)),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
           // 작은 화면에서는 배경 투명하게 설정
-          backgroundColor: isSmallScreen ? Colors.transparent : null,
+          backgroundColor: isSmallScreen ? Colors.transparent : Color(0xFFF9FAFC),
           body: GestureDetector(
             // 빈 공간 탭 시 텍스트 필드 포커스 해제
             onTap: () {
@@ -548,25 +548,12 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
                     padding: EdgeInsets.symmetric(horizontal: 16),
                     child: Column(
                       children: [
-                        // 현재 정렬 기준 표시
-                        Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 8.0),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.end,
-                            children: [
-                              Text(
-                                '정렬: ${_getSortOptionText(_currentSortOption)}',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.grey[600],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
                         Expanded(
                           child: Container(
-                            color: Colors.white,
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(15)
+                            ),
                             child: StreamBuilder<QuerySnapshot>(
                               stream: _getSortedQuery().snapshots(),
                               builder: (context, snapshot) {
@@ -574,7 +561,7 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
                                   return Center(child: Text('데이터를 불러오는 중 오류가 발생했습니다.'));
                                 }
                                 if (snapshot.connectionState == ConnectionState.waiting) {
-                                  return Center(child: Text('데이터를 불러오는 중입니다.'));
+                                  return Center(child: Text(''));
                                 }
                                 if (snapshot.data == null || snapshot.data!.docs.isEmpty) {
                                   return Center(child: Text('저장된 데이터가 없습니다.'));
@@ -648,6 +635,9 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
                                           ...docs.map((doc) {
                                             Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
                                             return InkWell(
+                                              highlightColor: Colors.transparent,
+                                              hoverColor: Colors.transparent,
+                                              splashColor: Colors.transparent,
                                               onTap: () {
                                                 _showEditDialog(
                                                   context, 
@@ -684,6 +674,9 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
                                     children: sortedDocs.map((document) {
                                       Map<String, dynamic> data = document.data() as Map<String, dynamic>;
                                       return InkWell(
+                                        highlightColor: Colors.transparent,
+                                        hoverColor: Colors.transparent,
+                                        splashColor: Colors.transparent,
                                         onTap: () {
                                           _showEditDialog(
                                             context, 
@@ -720,98 +713,101 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
                 
                 // 타이머 위치 조정 (작은 화면인 경우 화면에 맞게 조정)
                 if (isSmallScreen)
-                  // 작은 화면일 때는 화면 전체를 사용하여 타이머 표시
                   Container(
-                    width: double.infinity, // 가로 화면 꽉 채우기
+                    width: double.infinity,
                     child: Container(
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(12),
                         color: Colors.white,
-                        // 그림자 제거
                       ),
-                      child: GestureDetector(
-                        child: Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 10),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.center,
-                            children: [
-                              // 제목과 부제목 입력 필드 유지
-                              Expanded(
-                                child: TextField(
-                                  focusNode: _referenceFocusNode, // 포커스 노드 할당
-                                  controller: _referenceController,
-                                  decoration: InputDecoration(
-                                      hintText: "제목", border: InputBorder.none),
-                                  onChanged: (value) => _reference = value,
-                                  onSubmitted: (_) => _unfocusTextFields(),
+                      child: Focus(
+                        onFocusChange: (hasFocus) {
+                          _checkFocusState();
+                        },
+                        child: GestureDetector(
+                          child: Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 10),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                // 제목과 부제목 입력 필드 유지
+                                Expanded(
+                                  child: TextField(
+                                    focusNode: _referenceFocusNode, // 포커스 노드 할당
+                                    controller: _referenceController,
+                                    decoration: InputDecoration(
+                                        hintText: "제목", border: InputBorder.none),
+                                    onChanged: (value) => _reference = value,
+                                    onSubmitted: (_) => _unfocusTextFields(),
+                                  ),
                                 ),
-                              ),
-                              Expanded(
-                                child: TextField(
-                                  focusNode: _meetingDataFocusNode, // 포커스 노드 할당
-                                  controller: _meetingDataController,
-                                  decoration: InputDecoration(
-                                      hintText: "부제목", border: InputBorder.none),
-                                  onChanged: (value) => _meetingData = value,
-                                  onSubmitted: (_) => _unfocusTextFields(),
+                                Expanded(
+                                  child: TextField(
+                                    focusNode: _meetingDataFocusNode, // 포커스 노드 할당
+                                    controller: _meetingDataController,
+                                    decoration: InputDecoration(
+                                        hintText: "부제목", border: InputBorder.none),
+                                    onChanged: (value) => _meetingData = value,
+                                    onSubmitted: (_) => _unfocusTextFields(),
+                                  ),
                                 ),
-                              ),
-                              VerticalDivider(),
-                              Padding(padding: EdgeInsets.symmetric(horizontal: 4)),
-                              ValueListenableBuilder(
-                                valueListenable: _elapsedSecondsNotifier,
-                                builder: (context, value, child) {
-                                  final minutes = value ~/ 60;
-                                  final seconds = (value % 60).toString().padLeft(2, '0');
-                                  return Text(
-                                    '$minutes:$seconds',
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.bold,
+                                VerticalDivider(),
+                                Padding(padding: EdgeInsets.symmetric(horizontal: 4)),
+                                ValueListenableBuilder(
+                                  valueListenable: _elapsedSecondsNotifier,
+                                  builder: (context, value, child) {
+                                    final minutes = value ~/ 60;
+                                    final seconds = (value % 60).toString().padLeft(2, '0');
+                                    return Text(
+                                      '$minutes:$seconds',
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    );
+                                  },
+                                ),
+                                Padding(padding: EdgeInsets.symmetric(horizontal: 2)),
+                                
+                                // 타이머 제어 버튼들
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    // 재생/일시정지 버튼
+                                    IconButton(
+                                      icon: Icon(
+                                        _isPlaying ? Icons.pause : Icons.play_arrow,
+                                        color: _isPlaying ? Colors.orange : Colors.purple,
+                                      ),
+                                      onPressed: () {
+                                        if (_isPlaying) {
+                                          _pauseTimer();
+                                        } else {
+                                          _startTimer();
+                                        }
+                                      },
                                     ),
-                                  );
-                                },
-                              ),
-                              Padding(padding: EdgeInsets.symmetric(horizontal: 2)),
-                              
-                              // 타이머 제어 버튼들
-                              Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  // 재생/일시정지 버튼
-                                  IconButton(
-                                    icon: Icon(
-                                      _isPlaying ? Icons.pause : Icons.play_arrow,
-                                      color: _isPlaying ? Colors.orange : Colors.purple,
+                                    
+                                    // 완료 버튼 (정지 및 저장)
+                                    IconButton(
+                                      icon: Icon(Icons.stop, color: Colors.red),
+                                      onPressed: (_isPlaying || _isPaused) ? _stopTimer : null,
                                     ),
-                                    onPressed: () {
-                                      if (_isPlaying) {
-                                        _pauseTimer();
-                                      } else {
-                                        _startTimer();
-                                      }
-                                    },
-                                  ),
-                                  
-                                  // 완료 버튼 (정지 및 저장)
-                                  IconButton(
-                                    icon: Icon(Icons.stop, color: Colors.red),
-                                    onPressed: (_isPlaying || _isPaused) ? _stopTimer : null,
-                                  ),
-                                  
-                                  // 취소 버튼 (리셋)
-                                  ValueListenableBuilder(
-                                    valueListenable: _elapsedSecondsNotifier,
-                                    builder: (context, value, _) {
-                                      return IconButton(
-                                        icon: Icon(Icons.cancel, color: Colors.grey),
-                                        onPressed: value > 0 ? _resetTimer : null,
-                                      );
-                                    },
-                                  ),
-                                ],
-                              ),
-                            ],
+                                    
+                                    // 취소 버튼 (리셋)
+                                    ValueListenableBuilder(
+                                      valueListenable: _elapsedSecondsNotifier,
+                                      builder: (context, value, _) {
+                                        return IconButton(
+                                          icon: Icon(Icons.cancel, color: Colors.grey),
+                                          onPressed: value > 0 ? _resetTimer : null,
+                                        );
+                                      },
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ),

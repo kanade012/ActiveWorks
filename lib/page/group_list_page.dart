@@ -16,7 +16,13 @@ class _GroupListPageState extends State<GroupListPage> {
     final user = FirebaseAuth.instance.currentUser;
 
     return Scaffold(
+      backgroundColor: Colors.white,
       appBar: AppBar(
+        backgroundColor: Colors.white,
+        scrolledUnderElevation: 0, // 스크롤 시 높이 효과 제거
+        shadowColor: Colors.transparent, // 그림자 색상 투명하게
+        elevation: 0, // 앱바 높이 효과 제거
+        forceMaterialTransparency: false, // 머티리얼 효과 제거
         title: Text('내 그룹 목록'),
       ),
       body: user == null
@@ -62,6 +68,8 @@ class _GroupListPageState extends State<GroupListPage> {
                         final groupName = groupData['name'] ?? '이름 없는 그룹';
 
                         return ListTile(
+                          hoverColor: Colors.transparent,
+                          splashColor: Colors.transparent,
                           title: Text(groupName),
                           subtitle: Text('참가 코드: ${groupData['joinCode']}'),
                           trailing: Icon(Icons.arrow_forward_ios),

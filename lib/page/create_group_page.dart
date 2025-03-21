@@ -83,7 +83,9 @@ class _CreateGroupPageState extends State<CreateGroupPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.white,
       appBar: AppBar(
+        backgroundColor: Colors.white,
         title: Text('그룹 생성'),
       ),
       body: Padding(
@@ -103,12 +105,19 @@ class _CreateGroupPageState extends State<CreateGroupPage> {
                 },
               ),
               SizedBox(height: 20),
-              ElevatedButton(
-                onPressed: _isLoading ? null : _createGroup,
-                child: _isLoading
-                    ? CircularProgressIndicator()
-                    : Text('그룹 생성하기'),
-              ),
+              InkWell(
+                  onTap: _isLoading ? null : _createGroup,
+                  child : Container(
+                    padding: EdgeInsets.symmetric(vertical: 12, horizontal: 10),
+                    decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(4),
+                        color: Color(0xFF070707)
+                    ),
+                    child: _isLoading
+                        ? CircularProgressIndicator()
+                        : Text('그룹 생성하기', style: TextStyle(color: Colors.white),),
+                  )
+                ),
             ],
           ),
         ),

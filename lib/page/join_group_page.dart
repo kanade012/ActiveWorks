@@ -95,7 +95,9 @@ class _JoinGroupPageState extends State<JoinGroupPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.white,
       appBar: AppBar(
+        backgroundColor: Colors.white,
         title: Text('그룹 참가'),
       ),
       body: Padding(
@@ -115,13 +117,18 @@ class _JoinGroupPageState extends State<JoinGroupPage> {
                 },
               ),
               SizedBox(height: 20),
-              ElevatedButton(
-                onPressed: _isLoading ? null : _joinGroup,
+              InkWell(
+                onTap: _isLoading ? null : _joinGroup,child : Container(
+                padding: EdgeInsets.symmetric(vertical: 12, horizontal: 10),
+                decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(4),
+                    color: Color(0xFF070707)
+                ),
                 child: _isLoading
                     ? CircularProgressIndicator()
-                    : Text('그룹 참가하기'),
+                    : Text('그룹 참가하기', style: TextStyle(color: Colors.white),),
               ),
-            ],
+              )],
           ),
         ),
       ),
