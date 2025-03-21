@@ -132,15 +132,23 @@ class _GroupDetailPageState extends State<GroupDetailPage>
 
   void _stopTimer() {
     _timer?.cancel();
+    // 현재 TextField의 값을 저장
+    _reference = _referenceController.text;
+    _meetingData = _meetingDataController.text;
+    
     setState(() {
       _isPlaying = false;
       _isPaused = false;
+    });
+    
+    // 데이터 저장 후 TextField 초기화
+    _saveDataToFirestore().then((_) {
       _referenceController.clear();
       _meetingDataController.clear();
       _reference = "";
       _meetingData = "";
     });
-    _saveDataToFirestore();
+    
     _elapsedSecondsNotifier.value = 0;
   }
 
