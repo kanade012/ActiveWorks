@@ -47,6 +47,7 @@ class _GroupListPageState extends State<GroupListPage> {
                 }
 
                 return ListView.builder(
+                  padding: EdgeInsets.symmetric(horizontal: 20,),
                   itemCount: snapshot.data!.docs.length,
                   itemBuilder: (context, index) {
                     final groupDoc = snapshot.data!.docs[index];
@@ -67,23 +68,34 @@ class _GroupListPageState extends State<GroupListPage> {
                         final groupData = groupSnapshot.data!.data() as Map<String, dynamic>;
                         final groupName = groupData['name'] ?? '이름 없는 그룹';
 
-                        return ListTile(
-                          hoverColor: Colors.transparent,
-                          splashColor: Colors.transparent,
-                          title: Text(groupName),
-                          subtitle: Text('참가 코드: ${groupData['joinCode']}'),
-                          trailing: Icon(Icons.arrow_forward_ios),
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => GroupDetailPage(
-                                  groupId: groupId,
-                                  groupName: groupName,
-                                ),
+                        return Column(
+                          children: [
+                            Container(
+                              decoration: BoxDecoration(
+                                border: Border.all(width: 0.4),
+                                borderRadius: BorderRadius.circular(12),
+                                color: Colors.white
                               ),
-                            );
-                          },
+                              child: ListTile(
+                                hoverColor: Colors.transparent,
+                                splashColor: Colors.transparent,
+                                title: Text(groupName),
+                                trailing: Icon(Icons.arrow_forward_ios),
+                                onTap: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => GroupDetailPage(
+                                        groupId: groupId,
+                                        groupName: groupName,
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
+                            SizedBox(height: 10,)
+                          ],
                         );
                       },
                     );

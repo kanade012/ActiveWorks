@@ -340,16 +340,17 @@ class _GroupDetailPageState extends State<GroupDetailPage>
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
+        backgroundColor: Colors.white,
         title: Text('그룹 탈퇴'),
         content: Text('정말로 이 그룹에서 탈퇴하시겠습니까?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: Text('취소'),
+            child: Text('취소', style: TextStyle(color: Colors.black),),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: Text('탈퇴'),
+            child: Text('탈퇴', style: TextStyle(color: Colors.black),),
           ),
         ],
       ),
@@ -518,6 +519,44 @@ class _GroupDetailPageState extends State<GroupDetailPage>
                   elevation: 0,
                   forceMaterialTransparency: false,
                   actions: [
+                    StreamBuilder<DocumentSnapshot>(
+                      stream: FirebaseFirestore.instance
+                          .collection('groups')
+                          .doc(widget.groupId)
+                          .snapshots(),
+                      builder: (context, snapshot) {
+                        if (!snapshot.hasData) return SizedBox();
+                        
+                        return IconButton(
+                          icon: Icon(Icons.file_copy_outlined, 
+                            color: Colors.black, 
+                            size: 20
+                          ),
+                          onPressed: () async {
+                            final groupData = snapshot.data!.data() as Map<String, dynamic>;
+                            final joinCode = groupData['joinCode'];
+                            if (joinCode != null) {
+                              await Clipboard.setData(ClipboardData(text: joinCode));
+                              
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text("참여 코드가 복사되었습니다.\n코드: $joinCode"),
+                                  duration: Duration(seconds: 2),
+                                ),
+                              );
+                            } else {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text("참여 코드를 찾을 수 없습니다."),
+                                  duration: Duration(seconds: 2),
+                                ),
+                              );
+                            }
+                          },
+                          tooltip: '참여 코드 복사',
+                        );
+                      },
+                    ),
                     PopupMenuButton<SortOption>(
                       color: Colors.white,
                       icon: Row(
