@@ -41,10 +41,10 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
   final FocusNode _keyboardFocusNode = FocusNode();
   final FocusNode _referenceFocusNode = FocusNode();
   final FocusNode _meetingDataFocusNode = FocusNode();
-  
+
   // 전역 포커스 변경 감지 구독
   late final StreamSubscription<bool> _focusSubscription;
-  
+
   // 텍스트 필드 포커스 상태 추적
   bool _isTextFieldFocused = false;
 
@@ -65,15 +65,36 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
       setState(() {
         _isExpanded = !_isExpanded;
       });
-      
-      // 현재 창 크기 가져오기
+
+      // 현재 창 크기와 위치 가져오기
       Size currentSize = await windowManager.getSize();
-      
-      // 창 크기 변경 (너비는 유지)
+      Offset currentPosition = await windowManager.getPosition();
+
       if (_isExpanded) {
-        await windowManager.setSize(Size(currentSize.width, 600));
+        // 확장할 때 - 아래쪽 위치는 유지하고 위쪽으로 확장
+        // 현재 창의 맨 아래 y좌표 = 상단 y좌표 + 현재 높이
+        double bottomY = currentPosition.dy + currentSize.height;
+
+        // 확장된 창의 새 높이
+        double newHeight = 600;
+
+        // 새 상단 y좌표 = 현재 맨 아래 y좌표 - 새 높이
+        double newTopY = bottomY - newHeight;
+
+        // 너비는 그대로 유지하면서 높이 변경
+        await windowManager.setSize(Size(currentSize.width, newHeight));
+        await windowManager.setPosition(Offset(currentPosition.dx, newTopY));
       } else {
+        // 축소할 때 - 아래쪽 위치는 유지하고 위쪽을 축소
+        // 현재 창의 맨 아래 y좌표 = 상단 y좌표 + 현재 높이
+        double bottomY = currentPosition.dy + currentSize.height;
+
+        // 새 상단 y좌표 = 현재 맨 아래 y좌표 - 새 높이
+        double newTopY = bottomY - 80;
+
+        // 너비는 그대로 유지하면서 높이 변경
         await windowManager.setSize(Size(currentSize.width, 80));
+        await windowManager.setPosition(Offset(currentPosition.dx, newTopY));
       }
     } catch (e) {
       print('화면 크기 변경 중 오류 발생: $e');
@@ -91,7 +112,7 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
         _isAlwaysOnTop = !_isAlwaysOnTop;
       });
       await windowManager.setAlwaysOnTop(_isAlwaysOnTop);
-      
+
       // 상태 저장
       final SharedPreferences prefs = await SharedPreferences.getInstance();
       await prefs.setBool('is_always_on_top', _isAlwaysOnTop);
@@ -110,17 +131,17 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
     int now = DateTime.now().millisecondsSinceEpoch;
     if (now - _lastLoadTime < 500) return;
     _lastLoadTime = now;
-    
+
     try {
       final SharedPreferences prefs = await SharedPreferences.getInstance();
       bool savedState = prefs.getBool('is_always_on_top') ?? false;
-      
+
       // 현재 상태와 다를 때만 업데이트
       if (_isAlwaysOnTop != savedState) {
         setState(() {
           _isAlwaysOnTop = savedState;
         });
-        
+
         await windowManager.setAlwaysOnTop(savedState);
       }
     } catch (e) {
@@ -132,26 +153,26 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
   Future<void> _initializeWindow() async {
     try {
       await windowManager.ensureInitialized();
-      
+
       // SharedPreferences에서 저장된 상태 가져오기
       final SharedPreferences prefs = await SharedPreferences.getInstance();
       bool savedPinState = prefs.getBool('is_always_on_top') ?? false;
-      
+
       setState(() {
         _isAlwaysOnTop = savedPinState;
         _isExpanded = true;  // 기본값은 확장된 상태
       });
-      
+
       // 현재 창 크기 가져오기 (기본값 사용)
       Size currentSize = Size(800, 600);
-      
+
       WindowOptions windowOptions = WindowOptions(
         size: _isExpanded ? Size(currentSize.width, 600) : Size(currentSize.width, 80),
         center: true,
         backgroundColor: Colors.transparent,
         skipTaskbar: false,
       );
-      
+
       await windowManager.waitUntilReadyToShow(windowOptions, () async {
         await windowManager.show();
         await windowManager.focus();
@@ -168,13 +189,13 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
     _initializeFirebase();
     _initializeWindow();  // 창 초기화 함수 호출
     _loadAlwaysOnTopState();  // 저장된 화면 고정 상태 불러오기
-    
+
     // 위젯 바인딩 옵저버 등록
     WidgetsBinding.instance.addObserver(this);
-    
+
     // 포커스 노드 설정 및 감시
     _setupFocusNodes();
-    
+
     // 전체 키보드 포커스 설정
     WidgetsBinding.instance.addPostFrameCallback((_) {
       FocusScope.of(context).requestFocus(_keyboardFocusNode);
@@ -208,12 +229,12 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
     // 현재 TextField의 값을 저장
     _reference = _referenceController.text;
     _meetingData = _meetingDataController.text;
-    
+
     setState(() {
       _isPlaying = false;
       _isPaused = false;
     });
-    
+
     // 데이터 저장 후 TextField 초기화
     _saveDataToFirestore().then((_) {
       _referenceController.clear();
@@ -221,7 +242,7 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
       _reference = "";
       _meetingData = "";
     });
-    
+
     _elapsedSecondsNotifier.value = 0;
   }
 
@@ -248,7 +269,7 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
 
     try {
       final now = DateTime.now();
-      
+
       await FirebaseFirestore.instance
           .collection('users')
           .doc(_user!.uid)
@@ -318,9 +339,9 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
   void _showEditDialog(BuildContext context, String docId, String reference,
       String meetingData, {String? date, String? timeOfDay}) {
     TextEditingController _referenceController =
-        TextEditingController(text: reference);
+    TextEditingController(text: reference);
     TextEditingController _meetingDataController =
-        TextEditingController(text: meetingData);
+    TextEditingController(text: meetingData);
 
     showDialog(
       context: context,
@@ -340,8 +361,8 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
               if (date != null && timeOfDay != null)
                 Padding(
                   padding: const EdgeInsets.only(top: 8.0),
-                  child: Text('기록 시간: $date $timeOfDay', 
-                    style: TextStyle(fontSize: 12, color: Colors.grey)),
+                  child: Text('기록 시간: $date $timeOfDay',
+                      style: TextStyle(fontSize: 12, color: Colors.grey)),
                 ),
             ],
           ),
@@ -398,17 +419,17 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
     // 직접 포커스 이벤트 감시
     _referenceFocusNode.addListener(_checkFocusState);
     _meetingDataFocusNode.addListener(_checkFocusState);
-    
+
     // 글로벌 포커스 변경 감시 스트림 생성
     final focusController = StreamController<bool>.broadcast();
     _focusSubscription = focusController.stream.listen((hasFocus) {
       _checkFocusState();
     });
-    
+
     // 모든 프레임 업데이트 후 포커스 상태 체크
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkFocusState();
-      
+
       // 주기적으로 포커스 상태 체크
       Timer.periodic(Duration(milliseconds: 100), (timer) {
         if (!mounted) {
@@ -419,10 +440,10 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
       });
     });
   }
-  
+
   void _checkFocusState() {
     if (!mounted) return;
-    
+
     final hasFocus = _referenceFocusNode.hasFocus || _meetingDataFocusNode.hasFocus;
     if (hasFocus != _isTextFieldFocused) {
       setState(() {
@@ -441,10 +462,10 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
     _meetingDataFocusNode.removeListener(_checkFocusState);
     _meetingDataFocusNode.dispose();
     _focusSubscription.cancel();
-    
+
     // 위젯 바인딩 옵저버 제거
     WidgetsBinding.instance.removeObserver(this);
-    
+
     super.dispose();
   }
 
@@ -453,7 +474,7 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
     if (_user == null) {
       return FirebaseFirestore.instance.collection('dummy');
     }
-    
+
     Query<Map<String, dynamic>> query = FirebaseFirestore.instance
         .collection('users')
         .doc(_user!.uid)
@@ -467,7 +488,7 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
         return query.orderBy('timestamp', descending: false);
       case SortOption.time:
       case SortOption.date:
-        // 모든 데이터를 가져온 후 클라이언트에서 정렬
+      // 모든 데이터를 가져온 후 클라이언트에서 정렬
         return query.orderBy('timestamp', descending: true);
     }
   }
@@ -496,8 +517,8 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
   // 키보드 이벤트 처리 함수
   void _handleKeyEvent(RawKeyEvent event) {
     // 텍스트 필드에 포커스가 없을 때만 스페이스바 감지
-    if (!_isTextFieldFocused && 
-        !_referenceFocusNode.hasFocus && 
+    if (!_isTextFieldFocused &&
+        !_referenceFocusNode.hasFocus &&
         !_meetingDataFocusNode.hasFocus) {
       if (event is RawKeyDownEvent) {
         if (event.logicalKey == LogicalKeyboardKey.space) {
@@ -518,7 +539,7 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadAlwaysOnTopState();
     });
-    
+
     // 화면 높이 구하기
     final screenHeight = MediaQuery.of(context).size.height;
     final isSmallScreen = screenHeight <= 150;
@@ -542,7 +563,7 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
             shadowColor: Colors.transparent, // 그림자 색상 투명하게
             elevation: 0, // 앱바 높이 효과 제거
             forceMaterialTransparency: false, // 머티리얼 효과 제거
-            
+
             actions: [
               // 정렬 버튼을 드롭다운으로 변경
               PopupMenuButton<SortOption>(
@@ -550,7 +571,7 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
                 icon: Row(
                   children: [
                     Text('정렬 : ${_getSortOptionText(_currentSortOption)}',
-                      style: TextStyle(fontSize: 14, color: Colors.black)),
+                        style: TextStyle(fontSize: 14, color: Colors.black)),
                     Icon(Icons.arrow_drop_down, color: Colors.black),
                   ],
                 ),
@@ -675,8 +696,8 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
                         Expanded(
                           child: Container(
                             decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(15)
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(15)
                             ),
                             child: StreamBuilder<QuerySnapshot>(
                               stream: _getSortedQuery().snapshots(),
@@ -690,10 +711,10 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
                                 if (snapshot.data == null || snapshot.data!.docs.isEmpty) {
                                   return Center(child: Text('저장된 데이터가 없습니다.'));
                                 }
-                                
+
                                 // 클라이언트에서 정렬 처리
                                 List<DocumentSnapshot> sortedDocs = List.from(snapshot.data!.docs);
-                                
+
                                 if (_currentSortOption == SortOption.time) {
                                   sortedDocs.sort((a, b) {
                                     final aData = a.data() as Map<String, dynamic>;
@@ -703,7 +724,7 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
                                     return bTime.compareTo(aTime); // 내림차순 정렬
                                   });
                                 }
-                                
+
                                 // 현재 정렬이 날짜별인 경우 날짜별로 그룹화
                                 if (_currentSortOption == SortOption.date) {
                                   // 날짜로 정렬
@@ -721,28 +742,28 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
                                     }
                                     return compare;
                                   });
-                                  
+
                                   Map<String, List<DocumentSnapshot>> groupedByDate = {};
-                                  
+
                                   for (var doc in sortedDocs) {
                                     Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
                                     String date = data['date'] ?? '날짜 없음';
-                                    
+
                                     if (!groupedByDate.containsKey(date)) {
                                       groupedByDate[date] = [];
                                     }
                                     groupedByDate[date]!.add(doc);
                                   }
-                                  
+
                                   List<String> sortedDates = groupedByDate.keys.toList()
                                     ..sort((a, b) => b.compareTo(a)); // 최신 날짜가 먼저 오도록
-                                  
+
                                   return ListView.builder(
                                     itemCount: sortedDates.length,
                                     itemBuilder: (context, index) {
                                       String date = sortedDates[index];
                                       List<DocumentSnapshot> docs = groupedByDate[date]!;
-                                      
+
                                       return Column(
                                         crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
@@ -764,9 +785,9 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
                                               splashColor: Colors.transparent,
                                               onTap: () {
                                                 _showEditDialog(
-                                                  context, 
+                                                  context,
                                                   doc.id,
-                                                  data['reference'], 
+                                                  data['reference'],
                                                   data['meetingData'],
                                                   date: data['date'],
                                                   timeOfDay: data['timeOfDay'],
@@ -803,9 +824,9 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
                                         splashColor: Colors.transparent,
                                         onTap: () {
                                           _showEditDialog(
-                                            context, 
+                                            context,
                                             document.id,
-                                            data['reference'], 
+                                            data['reference'],
                                             data['meetingData'],
                                             date: data['date'],
                                             timeOfDay: data['timeOfDay'],
@@ -834,7 +855,7 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
                       ],
                     ),
                   ),
-                
+
                 // 타이머 위치 조정 (작은 화면인 경우 화면에 맞게 조정)
                 if (isSmallScreen)
                   Container(
@@ -904,7 +925,7 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
                                     ),
                                     onPressed: _toggleExpand,
                                   ),
-                                  
+
                                   // 화면 고정 버튼
                                   IconButton(
                                     icon: Icon(
@@ -913,7 +934,7 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
                                     ),
                                     onPressed: _toggleAlwaysOnTop,
                                   ),
-                                  
+
                                   // 재생/일시정지 버튼
                                   IconButton(
                                     icon: Icon(
@@ -954,7 +975,7 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
                     ),
                   )
                 else
-                  // 일반 화면에서는 기존 스타일 유지
+                // 일반 화면에서는 기존 스타일 유지
                   Positioned(
                     bottom: isSmallScreen ? null : 20,
                     left: 20,
@@ -1031,7 +1052,7 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
                                 },
                               ),
                               Padding(padding: EdgeInsets.symmetric(horizontal: 2)),
-                              
+
                               // 타이머 제어 버튼들
                               Row(
                                 mainAxisSize: MainAxisSize.min,
@@ -1044,7 +1065,7 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
                                     ),
                                     onPressed: _toggleExpand,
                                   ),
-                                  
+
                                   // 화면 고정 버튼
                                   IconButton(
                                     icon: Icon(
@@ -1053,7 +1074,7 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
                                     ),
                                     onPressed: _toggleAlwaysOnTop,
                                   ),
-                                  
+
                                   // 재생/일시정지 버튼
                                   IconButton(
                                     icon: Icon(
@@ -1068,13 +1089,13 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
                                       }
                                     },
                                   ),
-                                  
+
                                   // 완료 버튼 (정지 및 저장)
                                   IconButton(
                                     icon: Icon(Icons.stop, color: Colors.red),
                                     onPressed: (_isPlaying || _isPaused) ? _stopTimer : null,
                                   ),
-                                  
+
                                   // 취소 버튼 (리셋)
                                   ValueListenableBuilder(
                                     valueListenable: _elapsedSecondsNotifier,
@@ -1100,15 +1121,15 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
       ),
     );
   }
-  
+
   void _unfocusTextFields() {
     _referenceFocusNode.unfocus();
     _meetingDataFocusNode.unfocus();
     FocusScope.of(context).unfocus();
-    
+
     // 명시적 포커스 설정
     FocusScope.of(context).requestFocus(_keyboardFocusNode);
-    
+
     // 포커스 상태 즉시 업데이트
     setState(() {
       _isTextFieldFocused = false;

@@ -43,7 +43,7 @@ class _GroupDetailPageState extends State<GroupDetailPage>
 
   // 인증 서비스
   final AuthService _authService = AuthService();
-  
+
   // 현재 사용자
   UserModel? get _user => _authService.currentUser;
 
@@ -71,15 +71,36 @@ class _GroupDetailPageState extends State<GroupDetailPage>
       setState(() {
         _isExpanded = !_isExpanded;
       });
-      
-      // 현재 창 크기 가져오기
+
+      // 현재 창 크기와 위치 가져오기
       Size currentSize = await windowManager.getSize();
-      
-      // 창 크기 변경 (너비는 유지)
+      Offset currentPosition = await windowManager.getPosition();
+
       if (_isExpanded) {
-        await windowManager.setSize(Size(currentSize.width, 600));
+        // 확장할 때 - 아래쪽 위치는 유지하고 위쪽으로 확장
+        // 현재 창의 맨 아래 y좌표 = 상단 y좌표 + 현재 높이
+        double bottomY = currentPosition.dy + currentSize.height;
+
+        // 확장된 창의 새 높이
+        double newHeight = 600;
+
+        // 새 상단 y좌표 = 현재 맨 아래 y좌표 - 새 높이
+        double newTopY = bottomY - newHeight;
+
+        // 너비는 그대로 유지하면서 높이 변경
+        await windowManager.setSize(Size(currentSize.width, newHeight));
+        await windowManager.setPosition(Offset(currentPosition.dx, newTopY));
       } else {
+        // 축소할 때 - 아래쪽 위치는 유지하고 위쪽을 축소
+        // 현재 창의 맨 아래 y좌표 = 상단 y좌표 + 현재 높이
+        double bottomY = currentPosition.dy + currentSize.height;
+
+        // 새 상단 y좌표 = 현재 맨 아래 y좌표 - 새 높이
+        double newTopY = bottomY - 80;
+
+        // 너비는 그대로 유지하면서 높이 변경
         await windowManager.setSize(Size(currentSize.width, 80));
+        await windowManager.setPosition(Offset(currentPosition.dx, newTopY));
       }
     } catch (e) {
       print('화면 크기 변경 중 오류 발생: $e');
@@ -97,7 +118,7 @@ class _GroupDetailPageState extends State<GroupDetailPage>
         _isAlwaysOnTop = !_isAlwaysOnTop;
       });
       await windowManager.setAlwaysOnTop(_isAlwaysOnTop);
-      
+
       // 상태 저장
       final SharedPreferences prefs = await SharedPreferences.getInstance();
       await prefs.setBool('is_always_on_top', _isAlwaysOnTop);
@@ -116,17 +137,17 @@ class _GroupDetailPageState extends State<GroupDetailPage>
     int now = DateTime.now().millisecondsSinceEpoch;
     if (now - _lastLoadTime < 500) return;
     _lastLoadTime = now;
-    
+
     try {
       final SharedPreferences prefs = await SharedPreferences.getInstance();
       bool savedPinState = prefs.getBool('is_always_on_top') ?? false;
-      
+
       // 현재 상태와 다를 때만 업데이트
       if (_isAlwaysOnTop != savedPinState) {
         setState(() {
           _isAlwaysOnTop = savedPinState;
         });
-        
+
         await windowManager.setAlwaysOnTop(savedPinState);
       }
     } catch (e) {
@@ -138,26 +159,26 @@ class _GroupDetailPageState extends State<GroupDetailPage>
   Future<void> _initializeWindow() async {
     try {
       await windowManager.ensureInitialized();
-      
+
       // SharedPreferences에서 저장된 상태 가져오기
       final SharedPreferences prefs = await SharedPreferences.getInstance();
       bool savedPinState = prefs.getBool('is_always_on_top') ?? false;
-      
+
       setState(() {
         _isAlwaysOnTop = savedPinState;
         _isExpanded = true;  // 기본값은 확장된 상태
       });
-      
+
       // 현재 창 크기 가져오기 (기본값 사용)
       Size currentSize = Size(800, 600);
-      
+
       WindowOptions windowOptions = WindowOptions(
         size: _isExpanded ? Size(currentSize.width, 600) : Size(currentSize.width, 80),
         center: true,
         backgroundColor: Colors.transparent,
         skipTaskbar: false,
       );
-      
+
       await windowManager.waitUntilReadyToShow(windowOptions, () async {
         await windowManager.show();
         await windowManager.focus();
@@ -172,7 +193,7 @@ class _GroupDetailPageState extends State<GroupDetailPage>
   void initState() {
     super.initState();
     _initializeWindow();  // 창 초기화 함수 호출
-    
+
     // 위젯 바인딩 옵저버 등록
     WidgetsBinding.instance.addObserver(this);
 
@@ -263,12 +284,12 @@ class _GroupDetailPageState extends State<GroupDetailPage>
     // 현재 TextField의 값을 저장
     _reference = _referenceController.text;
     _meetingData = _meetingDataController.text;
-    
+
     setState(() {
       _isPlaying = false;
       _isPaused = false;
     });
-    
+
     // 데이터 저장 후 TextField 초기화
     _saveDataToFirestore().then((_) {
       _referenceController.clear();
@@ -276,7 +297,7 @@ class _GroupDetailPageState extends State<GroupDetailPage>
       _reference = "";
       _meetingData = "";
     });
-    
+
     _elapsedSecondsNotifier.value = 0;
   }
 
@@ -315,9 +336,9 @@ class _GroupDetailPageState extends State<GroupDetailPage>
         'time': _elapsedSecondsNotifier.value,
         'timestamp': FieldValue.serverTimestamp(),
         'date':
-            '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}',
+        '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}',
         'timeOfDay':
-            '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}',
+        '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}',
         'userId': _user!.uid,
         'userEmail': _user!.email,
       });
@@ -384,9 +405,9 @@ class _GroupDetailPageState extends State<GroupDetailPage>
       BuildContext context, String docId, String reference, String meetingData,
       {String? date, String? timeOfDay, String? userEmail}) {
     TextEditingController _referenceController =
-        TextEditingController(text: reference);
+    TextEditingController(text: reference);
     TextEditingController _meetingDataController =
-        TextEditingController(text: meetingData);
+    TextEditingController(text: meetingData);
 
     showDialog(
       context: context,
@@ -573,7 +594,7 @@ class _GroupDetailPageState extends State<GroupDetailPage>
       case SortOption.time:
       case SortOption.person:
       case SortOption.date:
-        // 모든 데이터를 가져온 후 클라이언트에서 정렬
+      // 모든 데이터를 가져온 후 클라이언트에서 정렬
         return query.orderBy('timestamp', descending: true);
     }
   }
@@ -624,7 +645,7 @@ class _GroupDetailPageState extends State<GroupDetailPage>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadAlwaysOnTopState();
     });
-    
+
     // 화면 높이 구하기
     final screenHeight = MediaQuery.of(context).size.height;
     final isSmallScreen = screenHeight <= 150;
@@ -641,119 +662,119 @@ class _GroupDetailPageState extends State<GroupDetailPage>
           appBar: isSmallScreen
               ? null
               : AppBar(
-                  title: Text(widget.groupName),
-                  backgroundColor: Color(0xFFF9FAFC),
-                  scrolledUnderElevation: 0,
-                  shadowColor: Colors.transparent,
-                  elevation: 0,
-                  forceMaterialTransparency: false,
-                  actions: [
-                    StreamBuilder<DocumentSnapshot>(
-                      stream: FirebaseFirestore.instance
-                          .collection('groups')
-                          .doc(widget.groupId)
-                          .snapshots(),
-                      builder: (context, snapshot) {
-                        if (!snapshot.hasData) return SizedBox();
-                        
-                        return IconButton(
-                          icon: Icon(Icons.file_copy_outlined, 
-                            color: Colors.black, 
-                            size: 20
+            title: Text(widget.groupName),
+            backgroundColor: Color(0xFFF9FAFC),
+            scrolledUnderElevation: 0,
+            shadowColor: Colors.transparent,
+            elevation: 0,
+            forceMaterialTransparency: false,
+            actions: [
+              StreamBuilder<DocumentSnapshot>(
+                stream: FirebaseFirestore.instance
+                    .collection('groups')
+                    .doc(widget.groupId)
+                    .snapshots(),
+                builder: (context, snapshot) {
+                  if (!snapshot.hasData) return SizedBox();
+
+                  return IconButton(
+                    icon: Icon(Icons.file_copy_outlined,
+                        color: Colors.black,
+                        size: 20
+                    ),
+                    onPressed: () async {
+                      final groupData = snapshot.data!.data() as Map<String, dynamic>;
+                      final joinCode = groupData['joinCode'];
+                      if (joinCode != null) {
+                        await Clipboard.setData(ClipboardData(text: joinCode));
+
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text("참여 코드가 복사되었습니다.\n코드: $joinCode"),
+                            duration: Duration(seconds: 2),
                           ),
-                          onPressed: () async {
-                            final groupData = snapshot.data!.data() as Map<String, dynamic>;
-                            final joinCode = groupData['joinCode'];
-                            if (joinCode != null) {
-                              await Clipboard.setData(ClipboardData(text: joinCode));
-                              
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text("참여 코드가 복사되었습니다.\n코드: $joinCode"),
-                                  duration: Duration(seconds: 2),
-                                ),
-                              );
-                            } else {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text("참여 코드를 찾을 수 없습니다."),
-                                  duration: Duration(seconds: 2),
-                                ),
-                              );
-                            }
-                          },
-                          tooltip: '참여 코드 복사',
                         );
-                      },
-                    ),
-                    PopupMenuButton<SortOption>(
-                      color: Colors.white,
-                      icon: Row(
-                        children: [
-                          Text('정렬 : ${_getSortOptionText(_currentSortOption)}',
-                              style:
-                                  TextStyle(fontSize: 14, color: Colors.black)),
-                          Icon(Icons.arrow_drop_down, color: Colors.black),
-                        ],
-                      ),
-                      onSelected: (SortOption option) {
-                        _changeSortOption(option);
-                      },
-                      itemBuilder: (BuildContext context) =>
-                          <PopupMenuEntry<SortOption>>[
-                        PopupMenuItem<SortOption>(
-                          value: SortOption.latest,
-                          child: Text('최신순',
-                              style: TextStyle(color: Colors.black)),
-                        ),
-                        PopupMenuItem<SortOption>(
-                          value: SortOption.oldest,
-                          child: Text('오래된순',
-                              style: TextStyle(color: Colors.black)),
-                        ),
-                        PopupMenuItem<SortOption>(
-                          value: SortOption.time,
-                          child: Text('기록 시간순',
-                              style: TextStyle(color: Colors.black)),
-                        ),
-                        PopupMenuItem<SortOption>(
-                          value: SortOption.person,
-                          child: Text('사람별',
-                              style: TextStyle(color: Colors.black)),
-                        ),
-                        PopupMenuItem<SortOption>(
-                          value: SortOption.date,
-                          child: Text('날짜별',
-                              style: TextStyle(color: Colors.black)),
-                        ),
-                      ],
-                    ),
-                    PopupMenuButton<String>(
-                      color: Colors.white,
-                      onSelected: (value) {
-                        if (value == 'leave') {
-                          _leaveGroup();
-                        }
-                      },
-                      itemBuilder: (BuildContext context) =>
-                          <PopupMenuEntry<String>>[
-                        PopupMenuItem<String>(
-                          value: 'leave',
-                          child: Row(
-                            children: [
-                              Icon(Icons.exit_to_app, color: Colors.red),
-                              SizedBox(width: 8),
-                              Text('그룹 탈퇴',
-                                  style: TextStyle(color: Colors.red)),
-                            ],
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text("참여 코드를 찾을 수 없습니다."),
+                            duration: Duration(seconds: 2),
                           ),
-                        ),
-                      ],
-                    ),
+                        );
+                      }
+                    },
+                    tooltip: '참여 코드 복사',
+                  );
+                },
+              ),
+              PopupMenuButton<SortOption>(
+                color: Colors.white,
+                icon: Row(
+                  children: [
+                    Text('정렬 : ${_getSortOptionText(_currentSortOption)}',
+                        style:
+                        TextStyle(fontSize: 14, color: Colors.black)),
+                    Icon(Icons.arrow_drop_down, color: Colors.black),
                   ],
                 ),
+                onSelected: (SortOption option) {
+                  _changeSortOption(option);
+                },
+                itemBuilder: (BuildContext context) =>
+                <PopupMenuEntry<SortOption>>[
+                  PopupMenuItem<SortOption>(
+                    value: SortOption.latest,
+                    child: Text('최신순',
+                        style: TextStyle(color: Colors.black)),
+                  ),
+                  PopupMenuItem<SortOption>(
+                    value: SortOption.oldest,
+                    child: Text('오래된순',
+                        style: TextStyle(color: Colors.black)),
+                  ),
+                  PopupMenuItem<SortOption>(
+                    value: SortOption.time,
+                    child: Text('기록 시간순',
+                        style: TextStyle(color: Colors.black)),
+                  ),
+                  PopupMenuItem<SortOption>(
+                    value: SortOption.person,
+                    child: Text('사람별',
+                        style: TextStyle(color: Colors.black)),
+                  ),
+                  PopupMenuItem<SortOption>(
+                    value: SortOption.date,
+                    child: Text('날짜별',
+                        style: TextStyle(color: Colors.black)),
+                  ),
+                ],
+              ),
+              PopupMenuButton<String>(
+                color: Colors.white,
+                onSelected: (value) {
+                  if (value == 'leave') {
+                    _leaveGroup();
+                  }
+                },
+                itemBuilder: (BuildContext context) =>
+                <PopupMenuEntry<String>>[
+                  PopupMenuItem<String>(
+                    value: 'leave',
+                    child: Row(
+                      children: [
+                        Icon(Icons.exit_to_app, color: Colors.red),
+                        SizedBox(width: 8),
+                        Text('그룹 탈퇴',
+                            style: TextStyle(color: Colors.red)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
           backgroundColor:
-              isSmallScreen ? Colors.transparent : Color(0xFFF9FAFC),
+          isSmallScreen ? Colors.transparent : Color(0xFFF9FAFC),
           body: GestureDetector(
             onTap: () {
               _unfocusTextFields();
@@ -788,14 +809,14 @@ class _GroupDetailPageState extends State<GroupDetailPage>
 
                                 // 클라이언트에서 정렬 처리
                                 List<DocumentSnapshot> sortedDocs =
-                                    List.from(snapshot.data!.docs);
+                                List.from(snapshot.data!.docs);
 
                                 if (_currentSortOption == SortOption.time) {
                                   sortedDocs.sort((a, b) {
                                     final aData =
-                                        a.data() as Map<String, dynamic>;
+                                    a.data() as Map<String, dynamic>;
                                     final bData =
-                                        b.data() as Map<String, dynamic>;
+                                    b.data() as Map<String, dynamic>;
                                     final aTime = aData['time'] ?? 0;
                                     final bTime = bData['time'] ?? 0;
                                     return bTime.compareTo(aTime); // 내림차순 정렬
@@ -807,13 +828,13 @@ class _GroupDetailPageState extends State<GroupDetailPage>
                                   // 날짜로 정렬
                                   sortedDocs.sort((a, b) {
                                     final aData =
-                                        a.data() as Map<String, dynamic>;
+                                    a.data() as Map<String, dynamic>;
                                     final bData =
-                                        b.data() as Map<String, dynamic>;
+                                    b.data() as Map<String, dynamic>;
                                     final aDate = aData['date'] ?? '';
                                     final bDate = bData['date'] ?? '';
                                     final compare =
-                                        bDate.compareTo(aDate); // 날짜 내림차순
+                                    bDate.compareTo(aDate); // 날짜 내림차순
                                     if (compare == 0) {
                                       // 같은 날짜면 시간으로 정렬
                                       final aTime = aData['timeOfDay'] ?? '';
@@ -824,11 +845,11 @@ class _GroupDetailPageState extends State<GroupDetailPage>
                                   });
 
                                   Map<String, List<DocumentSnapshot>>
-                                      groupedByDate = {};
+                                  groupedByDate = {};
 
                                   for (var doc in sortedDocs) {
                                     Map<String, dynamic> data =
-                                        doc.data() as Map<String, dynamic>;
+                                    doc.data() as Map<String, dynamic>;
                                     String date = data['date'] ?? '날짜 없음';
 
                                     if (!groupedByDate.containsKey(date)) {
@@ -847,11 +868,11 @@ class _GroupDetailPageState extends State<GroupDetailPage>
                                     itemBuilder: (context, index) {
                                       String date = sortedDates[index];
                                       List<DocumentSnapshot> docs =
-                                          groupedByDate[date]!;
+                                      groupedByDate[date]!;
 
                                       return Column(
                                         crossAxisAlignment:
-                                            CrossAxisAlignment.start,
+                                        CrossAxisAlignment.start,
                                         children: [
                                           Padding(
                                             padding: const EdgeInsets.symmetric(
@@ -879,13 +900,13 @@ class _GroupDetailPageState extends State<GroupDetailPage>
                                   // 사람별로 정렬
                                   sortedDocs.sort((a, b) {
                                     final aData =
-                                        a.data() as Map<String, dynamic>;
+                                    a.data() as Map<String, dynamic>;
                                     final bData =
-                                        b.data() as Map<String, dynamic>;
+                                    b.data() as Map<String, dynamic>;
                                     final aEmail = aData['userEmail'] ?? '';
                                     final bEmail = bData['userEmail'] ?? '';
                                     final compare =
-                                        aEmail.compareTo(bEmail); // 이메일 오름차순
+                                    aEmail.compareTo(bEmail); // 이메일 오름차순
                                     if (compare == 0) {
                                       // 같은 사람이면 시간순으로 정렬
                                       final aTime =
@@ -898,11 +919,11 @@ class _GroupDetailPageState extends State<GroupDetailPage>
                                   });
 
                                   Map<String, List<DocumentSnapshot>>
-                                      groupedByPerson = {};
+                                  groupedByPerson = {};
 
                                   for (var doc in sortedDocs) {
                                     Map<String, dynamic> data =
-                                        doc.data() as Map<String, dynamic>;
+                                    doc.data() as Map<String, dynamic>;
                                     String person =
                                         data['userEmail'] ?? '알 수 없음';
 
@@ -913,18 +934,18 @@ class _GroupDetailPageState extends State<GroupDetailPage>
                                   }
 
                                   List<String> sortedPersons =
-                                      groupedByPerson.keys.toList()..sort();
+                                  groupedByPerson.keys.toList()..sort();
 
                                   return ListView.builder(
                                     itemCount: sortedPersons.length,
                                     itemBuilder: (context, index) {
                                       String person = sortedPersons[index];
                                       List<DocumentSnapshot> docs =
-                                          groupedByPerson[person]!;
+                                      groupedByPerson[person]!;
 
                                       return Column(
                                         crossAxisAlignment:
-                                            CrossAxisAlignment.start,
+                                        CrossAxisAlignment.start,
                                         children: [
                                           Padding(
                                             padding: const EdgeInsets.symmetric(
@@ -1013,7 +1034,7 @@ class _GroupDetailPageState extends State<GroupDetailPage>
                                           hintText: "부제목",
                                           border: InputBorder.none),
                                       onChanged: (value) =>
-                                          _meetingData = value,
+                                      _meetingData = value,
                                       onSubmitted: (_) => _unfocusTextFields(),
                                     ),
                                   ),
@@ -1021,13 +1042,13 @@ class _GroupDetailPageState extends State<GroupDetailPage>
                                 VerticalDivider(),
                                 Padding(
                                     padding:
-                                        EdgeInsets.symmetric(horizontal: 4)),
+                                    EdgeInsets.symmetric(horizontal: 4)),
                                 ValueListenableBuilder(
                                   valueListenable: _elapsedSecondsNotifier,
                                   builder: (context, value, child) {
                                     final minutes = value ~/ 60;
                                     final seconds =
-                                        (value % 60).toString().padLeft(2, '0');
+                                    (value % 60).toString().padLeft(2, '0');
                                     return Text(
                                       '$minutes:$seconds',
                                       style: TextStyle(
@@ -1039,7 +1060,7 @@ class _GroupDetailPageState extends State<GroupDetailPage>
                                 ),
                                 Padding(
                                     padding:
-                                        EdgeInsets.symmetric(horizontal: 2)),
+                                    EdgeInsets.symmetric(horizontal: 2)),
                                 Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
@@ -1087,7 +1108,7 @@ class _GroupDetailPageState extends State<GroupDetailPage>
                                           icon: Icon(Icons.cancel,
                                               color: Colors.grey),
                                           onPressed:
-                                              value > 0 ? _resetTimer : null,
+                                          value > 0 ? _resetTimer : null,
                                         );
                                       },
                                     ),
@@ -1169,7 +1190,7 @@ class _GroupDetailPageState extends State<GroupDetailPage>
                               builder: (context, value, child) {
                                 final minutes = value ~/ 60;
                                 final seconds =
-                                    (value % 60).toString().padLeft(2, '0');
+                                (value % 60).toString().padLeft(2, '0');
                                 return Text(
                                   '$minutes:$seconds',
                                   style: TextStyle(
@@ -1297,16 +1318,16 @@ class _GroupDetailPageState extends State<GroupDetailPage>
       ),
       onTap: isMyRecord
           ? () {
-              _showEditDialog(
-                context,
-                document.id,
-                data['reference'],
-                data['meetingData'],
-                date: data['date'],
-                timeOfDay: data['timeOfDay'],
-                userEmail: data['userEmail'],
-              );
-            }
+        _showEditDialog(
+          context,
+          document.id,
+          data['reference'],
+          data['meetingData'],
+          date: data['date'],
+          timeOfDay: data['timeOfDay'],
+          userEmail: data['userEmail'],
+        );
+      }
           : null,
     );
   }
