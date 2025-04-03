@@ -53,11 +53,36 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
   UserModel? get _user => _authService.currentUser;
 
   // 화면 크기와 고정 상태를 관리하기 위한 변수 추가
-  bool _isExpanded = false;
+  bool _isExpanded = true;
   bool _isAlwaysOnTop = false;  // 기본값을 false로 변경
 
   // 마지막 상태 로드 시간 추적
   int _lastLoadTime = 0;
+
+  // 화면 확장/축소 전환 함수
+  Future<void> _toggleExpand() async {
+    try {
+      setState(() {
+        _isExpanded = !_isExpanded;
+      });
+      
+      // 현재 창 크기 가져오기
+      Size currentSize = await windowManager.getSize();
+      
+      // 창 크기 변경 (너비는 유지)
+      if (_isExpanded) {
+        await windowManager.setSize(Size(currentSize.width, 600));
+      } else {
+        await windowManager.setSize(Size(currentSize.width, 80));
+      }
+    } catch (e) {
+      print('화면 크기 변경 중 오류 발생: $e');
+      // 오류 발생 시 상태 되돌리기
+      setState(() {
+        _isExpanded = !_isExpanded;
+      });
+    }
+  }
 
   // 항상 위에 표시 상태 전환 함수
   Future<void> _toggleAlwaysOnTop() async {
@@ -108,25 +133,29 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
     try {
       await windowManager.ensureInitialized();
       
+      // SharedPreferences에서 저장된 상태 가져오기
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      bool savedPinState = prefs.getBool('is_always_on_top') ?? false;
+      
+      setState(() {
+        _isAlwaysOnTop = savedPinState;
+        _isExpanded = true;  // 기본값은 확장된 상태
+      });
+      
+      // 현재 창 크기 가져오기 (기본값 사용)
+      Size currentSize = Size(800, 600);
+      
       WindowOptions windowOptions = WindowOptions(
-        size: Size(800, 20),
+        size: _isExpanded ? Size(currentSize.width, 600) : Size(currentSize.width, 80),
         center: true,
         backgroundColor: Colors.transparent,
         skipTaskbar: false,
       );
       
-      // SharedPreferences에서 저장된 화면 고정 상태 가져오기
-      final SharedPreferences prefs = await SharedPreferences.getInstance();
-      bool savedState = prefs.getBool('is_always_on_top') ?? false;
-      
-      setState(() {
-        _isAlwaysOnTop = savedState;
-      });
-      
       await windowManager.waitUntilReadyToShow(windowOptions, () async {
         await windowManager.show();
         await windowManager.focus();
-        await windowManager.setAlwaysOnTop(savedState);  // 저장된 값으로 초기화
+        await windowManager.setAlwaysOnTop(savedPinState);
       });
     } catch (e) {
       print('창 초기화 중 오류 발생: $e');
@@ -137,6 +166,7 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     _initializeFirebase();
+    _initializeWindow();  // 창 초기화 함수 호출
     _loadAlwaysOnTopState();  // 저장된 화면 고정 상태 불러오기
     
     // 위젯 바인딩 옵저버 등록
@@ -866,6 +896,15 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
                               Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
+                                  // 화면 확장/축소 버튼
+                                  IconButton(
+                                    icon: Icon(
+                                      _isExpanded ? Icons.expand_more : Icons.expand_less,
+                                      color: Colors.blue,
+                                    ),
+                                    onPressed: _toggleExpand,
+                                  ),
+                                  
                                   // 화면 고정 버튼
                                   IconButton(
                                     icon: Icon(
@@ -997,6 +1036,15 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
                               Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
+                                  // 화면 확장/축소 버튼
+                                  IconButton(
+                                    icon: Icon(
+                                      _isExpanded ? Icons.expand_more : Icons.expand_less,
+                                      color: Colors.blue,
+                                    ),
+                                    onPressed: _toggleExpand,
+                                  ),
+                                  
                                   // 화면 고정 버튼
                                   IconButton(
                                     icon: Icon(

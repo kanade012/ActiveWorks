@@ -59,25 +59,110 @@ class _GroupDetailPageState extends State<GroupDetailPage>
   late final StreamSubscription<bool> _focusSubscription;
 
   // 화면 크기와 고정 상태를 관리하기 위한 변수 추가
+  bool _isExpanded = true;
   bool _isAlwaysOnTop = false;  // 기본값을 false로 변경
 
   // 마지막 상태 로드 시간 추적
   int _lastLoadTime = 0;
+
+  // 화면 확장/축소 전환 함수
+  Future<void> _toggleExpand() async {
+    try {
+      setState(() {
+        _isExpanded = !_isExpanded;
+      });
+      
+      // 현재 창 크기 가져오기
+      Size currentSize = await windowManager.getSize();
+      
+      // 창 크기 변경 (너비는 유지)
+      if (_isExpanded) {
+        await windowManager.setSize(Size(currentSize.width, 600));
+      } else {
+        await windowManager.setSize(Size(currentSize.width, 80));
+      }
+    } catch (e) {
+      print('화면 크기 변경 중 오류 발생: $e');
+      // 오류 발생 시 상태 되돌리기
+      setState(() {
+        _isExpanded = !_isExpanded;
+      });
+    }
+  }
+
+  // 항상 위에 표시 상태 전환 함수
+  Future<void> _toggleAlwaysOnTop() async {
+    try {
+      setState(() {
+        _isAlwaysOnTop = !_isAlwaysOnTop;
+      });
+      await windowManager.setAlwaysOnTop(_isAlwaysOnTop);
+      
+      // 상태 저장
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('is_always_on_top', _isAlwaysOnTop);
+    } catch (e) {
+      print('화면 고정 상태 변경 중 오류 발생: $e');
+      // 오류 발생 시 상태 되돌리기
+      setState(() {
+        _isAlwaysOnTop = !_isAlwaysOnTop;
+      });
+    }
+  }
+
+  // 화면 고정 상태 불러오기
+  Future<void> _loadAlwaysOnTopState() async {
+    // 너무 자주 호출되는 것 방지 (500ms 이내 호출 무시)
+    int now = DateTime.now().millisecondsSinceEpoch;
+    if (now - _lastLoadTime < 500) return;
+    _lastLoadTime = now;
+    
+    try {
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      bool savedPinState = prefs.getBool('is_always_on_top') ?? false;
+      
+      // 현재 상태와 다를 때만 업데이트
+      if (_isAlwaysOnTop != savedPinState) {
+        setState(() {
+          _isAlwaysOnTop = savedPinState;
+        });
+        
+        await windowManager.setAlwaysOnTop(savedPinState);
+      }
+    } catch (e) {
+      print('상태 불러오기 중 오류 발생: $e');
+    }
+  }
 
   // 초기 창 설정 함수
   Future<void> _initializeWindow() async {
     try {
       await windowManager.ensureInitialized();
       
-      // SharedPreferences에서 저장된 화면 고정 상태 가져오기
+      // SharedPreferences에서 저장된 상태 가져오기
       final SharedPreferences prefs = await SharedPreferences.getInstance();
-      bool savedState = prefs.getBool('is_always_on_top') ?? false;
+      bool savedPinState = prefs.getBool('is_always_on_top') ?? false;
       
       setState(() {
-        _isAlwaysOnTop = savedState;
+        _isAlwaysOnTop = savedPinState;
+        _isExpanded = true;  // 기본값은 확장된 상태
       });
       
-      await windowManager.setAlwaysOnTop(savedState);  // 저장된 값으로 초기화
+      // 현재 창 크기 가져오기 (기본값 사용)
+      Size currentSize = Size(800, 600);
+      
+      WindowOptions windowOptions = WindowOptions(
+        size: _isExpanded ? Size(currentSize.width, 600) : Size(currentSize.width, 80),
+        center: true,
+        backgroundColor: Colors.transparent,
+        skipTaskbar: false,
+      );
+      
+      await windowManager.waitUntilReadyToShow(windowOptions, () async {
+        await windowManager.show();
+        await windowManager.focus();
+        await windowManager.setAlwaysOnTop(savedPinState);
+      });
     } catch (e) {
       print('창 초기화 중 오류 발생: $e');
     }
@@ -535,11 +620,12 @@ class _GroupDetailPageState extends State<GroupDetailPage>
 
   @override
   Widget build(BuildContext context) {
-    // 페이지가 화면에 보일 때마다 화면 고정 상태 확인
+    // 페이지가 화면에 보일 때마다 상태 확인
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadAlwaysOnTopState();
     });
     
+    // 화면 높이 구하기
     final screenHeight = MediaQuery.of(context).size.height;
     final isSmallScreen = screenHeight <= 150;
 
@@ -959,6 +1045,13 @@ class _GroupDetailPageState extends State<GroupDetailPage>
                                   children: [
                                     IconButton(
                                       icon: Icon(
+                                        _isExpanded ? Icons.expand_more : Icons.expand_less,
+                                        color: Colors.blue,
+                                      ),
+                                      onPressed: _toggleExpand,
+                                    ),
+                                    IconButton(
+                                      icon: Icon(
                                         _isAlwaysOnTop ? Icons.push_pin : Icons.push_pin_outlined,
                                         color: _isAlwaysOnTop ? Colors.orange : Colors.grey,
                                       ),
@@ -1093,6 +1186,13 @@ class _GroupDetailPageState extends State<GroupDetailPage>
                               children: [
                                 IconButton(
                                   icon: Icon(
+                                    _isExpanded ? Icons.expand_more : Icons.expand_less,
+                                    color: Colors.blue,
+                                  ),
+                                  onPressed: _toggleExpand,
+                                ),
+                                IconButton(
+                                  icon: Icon(
                                     _isAlwaysOnTop ? Icons.push_pin : Icons.push_pin_outlined,
                                     color: _isAlwaysOnTop ? Colors.orange : Colors.grey,
                                   ),
@@ -1209,49 +1309,5 @@ class _GroupDetailPageState extends State<GroupDetailPage>
             }
           : null,
     );
-  }
-
-  // 항상 위에 표시 상태 전환 함수
-  Future<void> _toggleAlwaysOnTop() async {
-    try {
-      setState(() {
-        _isAlwaysOnTop = !_isAlwaysOnTop;
-      });
-      await windowManager.setAlwaysOnTop(_isAlwaysOnTop);
-      
-      // 상태 저장
-      final SharedPreferences prefs = await SharedPreferences.getInstance();
-      await prefs.setBool('is_always_on_top', _isAlwaysOnTop);
-    } catch (e) {
-      print('화면 고정 상태 변경 중 오류 발생: $e');
-      // 오류 발생 시 상태 되돌리기
-      setState(() {
-        _isAlwaysOnTop = !_isAlwaysOnTop;
-      });
-    }
-  }
-
-  // 화면 고정 상태 불러오기
-  Future<void> _loadAlwaysOnTopState() async {
-    // 너무 자주 호출되는 것 방지 (500ms 이내 호출 무시)
-    int now = DateTime.now().millisecondsSinceEpoch;
-    if (now - _lastLoadTime < 500) return;
-    _lastLoadTime = now;
-    
-    try {
-      final SharedPreferences prefs = await SharedPreferences.getInstance();
-      bool savedState = prefs.getBool('is_always_on_top') ?? false;
-      
-      // 현재 상태와 다를 때만 업데이트
-      if (_isAlwaysOnTop != savedState) {
-        setState(() {
-          _isAlwaysOnTop = savedState;
-        });
-        
-        await windowManager.setAlwaysOnTop(savedState);
-      }
-    } catch (e) {
-      print('화면 고정 상태 불러오기 중 오류 발생: $e');
-    }
   }
 }
