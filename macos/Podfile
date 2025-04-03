@@ -31,6 +31,9 @@ target 'Runner' do
   use_modular_headers!
 
   flutter_install_all_macos_pods File.dirname(File.realpath(__FILE__))
+  # FirebaseFirestore 직접 지정 제거 (충돌 발생)
+  # pod 'FirebaseFirestore', :git => 'https://github.com/firebase/firebase-ios-sdk.git', :tag => '10.21.0'
+  
   target 'RunnerTests' do
     inherit! :search_paths
   end

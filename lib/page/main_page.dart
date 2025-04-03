@@ -3,11 +3,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:planner/page/login_page.dart';
 import 'package:planner/page/create_group_page.dart';
 import 'package:planner/page/join_group_page.dart';
 import 'package:planner/page/group_list_page.dart';
+import '../services/auth_service.dart';
+import '../models/user_model.dart';
 
 class MainPage extends StatefulWidget {
   const MainPage({Key? key}) : super(key: key);
@@ -31,8 +32,6 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
   Timer? _timer;
   bool _isPlaying = false;
   bool _isPaused = false;
-  User? _user;
-  StreamSubscription<User?>? _authStateSubscription;
   SortOption _currentSortOption = SortOption.latest;
   final ValueNotifier<int> _elapsedSecondsNotifier = ValueNotifier<int>(0);
 
@@ -47,11 +46,14 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
   // 텍스트 필드 포커스 상태 추적
   bool _isTextFieldFocused = false;
 
+  // 대신 AuthService 사용
+  final AuthService _authService = AuthService();
+  UserModel? get _user => _authService.currentUser;
+
   @override
   void initState() {
     super.initState();
     _initializeFirebase();
-    _checkUser();
     
     // 위젯 바인딩 옵저버 등록
     WidgetsBinding.instance.addObserver(this);
@@ -67,20 +69,6 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
 
   Future<void> _initializeFirebase() async {
     await Firebase.initializeApp();
-  }
-
-  Future<void> _checkUser() async {
-    _authStateSubscription = FirebaseAuth.instance.authStateChanges().listen((User? user) {
-      if (mounted) {
-        setState(() {
-          _user = user;
-        });
-        if (user == null) {
-          Navigator.of(context).pushReplacement(
-              MaterialPageRoute(builder: (_) => AuthPage(),));
-        }
-      }
-    });
   }
 
   void _startTimer() {
@@ -270,7 +258,9 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
   }
 
   void _logout() async {
-    await FirebaseAuth.instance.signOut();
+    await _authService.signOut();
+    // 로그아웃 후 로그인 페이지로 이동
+    Navigator.of(context).pushReplacementNamed('/login');
   }
 
   @override
@@ -321,7 +311,6 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
 
   @override
   void dispose() {
-    _authStateSubscription?.cancel();
     _timer?.cancel();
     _elapsedSecondsNotifier.dispose();
     _keyboardFocusNode.dispose();

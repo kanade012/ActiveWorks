@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'dart:math';
+import '../services/auth_service.dart';
+import '../models/user_model.dart';
 
 class CreateGroupPage extends StatefulWidget {
   const CreateGroupPage({Key? key}) : super(key: key);
@@ -11,50 +12,103 @@ class CreateGroupPage extends StatefulWidget {
 }
 
 class _CreateGroupPageState extends State<CreateGroupPage> {
-  final _formKey = GlobalKey<FormState>();
-  final _groupNameController = TextEditingController();
-  bool _isLoading = false;
-
-  String _generateJoinCode() {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890';
-    final random = Random();
-    return String.fromCharCodes(
-      Iterable.generate(
-        6, // 6자리 코드
-        (_) => chars.codeUnitAt(random.nextInt(chars.length)),
+  final TextEditingController _groupNameController = TextEditingController();
+  bool _isCreating = false;
+  final AuthService _authService = AuthService();
+  
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Color(0xFFF9FAFC),
+      appBar: AppBar(
+        backgroundColor: Color(0xFFF9FAFC),
+        title: Text('그룹 생성'),
+        scrolledUnderElevation: 0,
+        shadowColor: Colors.transparent,
+        elevation: 0,
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          children: [
+            Container(
+              padding: EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                children: [
+                  TextField(
+                    controller: _groupNameController,
+                    decoration: InputDecoration(
+                      labelText: '그룹 이름',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  SizedBox(height: 20),
+                  _isCreating
+                      ? CircularProgressIndicator()
+                      : ElevatedButton(
+                          onPressed: _createGroup,
+                          child: Text('그룹 생성'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.blue,
+                            foregroundColor: Colors.white,
+                            minimumSize: Size(double.infinity, 50),
+                          ),
+                        ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
   Future<void> _createGroup() async {
-    if (!_formKey.currentState!.validate()) return;
-
     setState(() {
-      _isLoading = true;
+      _isCreating = true;
     });
 
+    final groupName = _groupNameController.text.trim();
+    if (groupName.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('그룹 이름을 입력하세요.')),
+      );
+      setState(() {
+        _isCreating = false;
+      });
+      return;
+    }
+
     try {
-      final user = FirebaseAuth.instance.currentUser;
+      final user = _authService.currentUser;
       if (user == null) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('로그인이 필요합니다.')),
         );
+        setState(() {
+          _isCreating = false;
+        });
         return;
       }
 
-      final joinCode = _generateJoinCode();
-      final groupRef = FirebaseFirestore.instance.collection('groups').doc();
+      // 참여 코드 생성 (6자리 무작위 코드)
+      final random = Random();
+      final joinCode = List.generate(6, (_) => random.nextInt(10)).join();
 
-      await groupRef.set({
-        'id': groupRef.id,
-        'name': _groupNameController.text,
-        'joinCode': joinCode,
-        'members': [user.uid],
+      // 그룹 생성
+      final groupRef = await FirebaseFirestore.instance.collection('groups').add({
+        'name': groupName,
         'createdBy': user.uid,
         'createdAt': FieldValue.serverTimestamp(),
+        'members': [user.uid],
+        'joinCode': joinCode,
       });
 
-      // 사용자의 그룹 목록에도 추가
+      // 사용자의 그룹 목록에 추가
       await FirebaseFirestore.instance
           .collection('users')
           .doc(user.uid)
@@ -62,66 +116,33 @@ class _CreateGroupPageState extends State<CreateGroupPage> {
           .doc(groupRef.id)
           .set({
         'groupId': groupRef.id,
+        'name': groupName,
         'joinedAt': FieldValue.serverTimestamp(),
+        'isCreator': true,
       });
 
+      // 성공 메시지 및 참여 코드 표시
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('그룹이 생성되었습니다. 참가 코드: $joinCode')),
+        SnackBar(
+          content: Text('그룹이 생성되었습니다. 참여 코드: $joinCode'),
+          duration: Duration(seconds: 5),
+        ),
       );
-      Navigator.pop(context);
+
+      // 그룹 생성 후 이전 화면으로 이동
+      Future.delayed(Duration(seconds: 1), () {
+        Navigator.pop(context);
+      });
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('그룹 생성에 실패했습니다: $e')),
       );
     } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isCreating = false;
+        });
+      }
     }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        title: Text('그룹 생성'),
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            children: [
-              TextFormField(
-                controller: _groupNameController,
-                decoration: InputDecoration(labelText: '그룹 이름'),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return '그룹 이름을 입력해주세요.';
-                  }
-                  return null;
-                },
-              ),
-              SizedBox(height: 20),
-              InkWell(
-                  onTap: _isLoading ? null : _createGroup,
-                  child : Container(
-                    padding: EdgeInsets.symmetric(vertical: 12, horizontal: 10),
-                    decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(4),
-                        color: Color(0xFF070707)
-                    ),
-                    child: _isLoading
-                        ? CircularProgressIndicator()
-                        : Text('그룹 생성하기', style: TextStyle(color: Colors.white),),
-                  )
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
   }
 } 

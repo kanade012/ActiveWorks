@@ -1,185 +1,176 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:planner/page/main_page.dart';
+import '../services/auth_service.dart';
 
 class AuthPage extends StatefulWidget {
-  const AuthPage({Key? key}) : super(key: key);
-
   @override
-  State<AuthPage> createState() => _AuthPageState();
+  _AuthPageState createState() => _AuthPageState();
 }
 
 class _AuthPageState extends State<AuthPage> {
-  final _formKey = GlobalKey<FormState>();
-  final _emailController = TextEditingController();
-  final _passwordController = TextEditingController();
   bool _isLogin = true;
-  String _errorMessage = '';
-
-  @override
-  void initState() {
-    super.initState();
-  }
-
-  Future<void> _submit() async {
-    if (_formKey.currentState!.validate()) {
-      try {
-        if (_isLogin) {
-          await FirebaseAuth.instance.signInWithEmailAndPassword(
-            email: _emailController.text,
-            password: _passwordController.text,
-          );
-        } else {
-          await FirebaseAuth.instance.createUserWithEmailAndPassword(
-            email: _emailController.text,
-            password: _passwordController.text,
-          );
-        }
-        
-        // 스택을 남기지 않고 메인 페이지로 이동
-        Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(builder: (context) => MainPage()),
-          (route) => false,
-        );
-      } on FirebaseAuthException catch (e) {
-        setState(() {
-          _errorMessage = e.message ?? '알 수 없는 오류가 발생했습니다.';
-        });
-      }
-    }
-  }
-
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
+  final TextEditingController _displayNameController = TextEditingController();
+  bool _isLoading = false;
+  final AuthService _authService = AuthService();
+  
   @override
   Widget build(BuildContext context) {
-    // 화면 너비 구하기 - 반응형 디자인을 위해
-    final screenWidth = MediaQuery.of(context).size.width;
-    // 버튼 너비 계산 (화면 너비의 80%, 최소 150px)
-    final buttonWidth = screenWidth * 0.8 > 150 ? screenWidth * 0.8 : 150.0;
-    
     return Scaffold(
-      backgroundColor: Colors.white, // 배경색 검정으로 변경
+      backgroundColor: Colors.black,
       appBar: AppBar(
-        backgroundColor: Colors.white, // 앱바 배경색 검정으로 변경
-        title: Text(_isLogin ? '로그인' : '회원가입', style: TextStyle(color: Colors.black)),
-        leading: Padding(
-          padding: EdgeInsets.symmetric(horizontal: 5),
-          child: Text("Active Works", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black)),
-        ),
+        backgroundColor: Colors.black,
+        title: Text(_isLogin ? '로그인' : '회원가입', style: TextStyle(color: Colors.white)),
       ),
       body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: <Widget>[
+        padding: EdgeInsets.all(16.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            TextFormField(
+              controller: _emailController,
+              decoration: InputDecoration(
+                labelText: '이메일',
+                labelStyle: TextStyle(color: Colors.white),
+                enabledBorder: OutlineInputBorder(
+                  borderSide: BorderSide(color: Colors.white),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderSide: BorderSide(color: Colors.white),
+                ),
+              ),
+              style: TextStyle(color: Colors.white),
+            ),
+            SizedBox(height: 16),
+            TextFormField(
+              controller: _passwordController,
+              decoration: InputDecoration(
+                labelText: '비밀번호',
+                labelStyle: TextStyle(color: Colors.white),
+                enabledBorder: OutlineInputBorder(
+                  borderSide: BorderSide(color: Colors.white),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderSide: BorderSide(color: Colors.white),
+                ),
+              ),
+              obscureText: true,
+              style: TextStyle(color: Colors.white),
+            ),
+            if (!_isLogin) ...[
+              SizedBox(height: 16),
               TextFormField(
-                controller: _emailController,
+                controller: _displayNameController,
                 decoration: InputDecoration(
-                  labelText: '이메일',
-                  labelStyle: TextStyle(color: Colors.grey),
-                  enabledBorder: UnderlineInputBorder(
-                    borderSide: BorderSide(color: Colors.black),
+                  labelText: '이름 (선택사항)',
+                  labelStyle: TextStyle(color: Colors.white),
+                  enabledBorder: OutlineInputBorder(
+                    borderSide: BorderSide(color: Colors.white),
                   ),
-                  focusedBorder: UnderlineInputBorder(
-                    borderSide: BorderSide(color: Colors.black),
+                  focusedBorder: OutlineInputBorder(
+                    borderSide: BorderSide(color: Colors.white),
                   ),
                 ),
-                style: TextStyle(color: Colors.black),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return '이메일을 입력해주세요.';
-                  }
-                  return null;
-                },
+                style: TextStyle(color: Colors.white),
               ),
-              TextFormField(
-                controller: _passwordController,
-                obscureText: true,
-                decoration: InputDecoration(
-                  labelText: '비밀번호',
-                  labelStyle: TextStyle(color: Colors.grey),
-                  enabledBorder: UnderlineInputBorder(
-                    borderSide: BorderSide(color: Colors.black),
-                  ),
-                  focusedBorder: UnderlineInputBorder(
-                    borderSide: BorderSide(color: Colors.black),
-                  ),
-                ),
-                style: TextStyle(color: Colors.black),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return '비밀번호를 입력해주세요.';
-                  }
-                  return null;
-                },
-              ),
-              SizedBox(height: 20),
-              Container(
-                width: buttonWidth, // 반응형 너비 적용
-                child: InkWell(
-                  onTap: _submit,
-                  child: Container(
-                    padding: EdgeInsets.symmetric(vertical: 12),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(4),
-                      color: Color(0xFF070707)
-                    ),
-                    child: Center(
-                      child: Text(
-                        _isLogin ? '로그인' : '회원가입',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              SizedBox(height: 20),
-              Container(
-                width: buttonWidth, // 반응형 너비 적용
-                child: InkWell(
-                  onTap: () {
-                    setState(() {
-                      _isLogin = !_isLogin;
-                      _errorMessage = ''; // 에러 메시지 초기화
-                    });
-                  },
-                  child: Container(
-                    padding: EdgeInsets.symmetric(vertical: 12),
-                    decoration: BoxDecoration(
-                      border: Border.all(width: 1, color: Colors.black),
-                      borderRadius: BorderRadius.circular(4),
-                      color: Colors.white
-                    ),
-                    child: Center(
-                      child: Text(
-                        _isLogin ? '회원가입으로 이동' : '로그인으로 이동',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.black,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              if (_errorMessage.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 8.0),
-                  child: Text(
-                    _errorMessage,
-                    style: TextStyle(color: Colors.red),
-                  ),
-                ),
             ],
+            SizedBox(height: 24),
+            _isLoading
+                ? CircularProgressIndicator(color: Colors.white)
+                : Column(
+                    children: [
+                      _buildButton(
+                        text: _isLogin ? '로그인' : '회원가입',
+                        onPressed: _handleSubmit,
+                      ),
+                      SizedBox(height: 16),
+                      _buildButton(
+                        text: _isLogin ? '회원가입으로 이동' : '로그인으로 이동',
+                        onPressed: _toggleAuthMode,
+                      ),
+                    ],
+                  ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildButton({required String text, required VoidCallback onPressed}) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final buttonWidth = screenWidth * 0.8 > 150 ? screenWidth * 0.8 : 150.0;
+    
+    return Container(
+      width: buttonWidth,
+      child: ElevatedButton(
+        onPressed: onPressed,
+        child: Padding(
+          padding: EdgeInsets.symmetric(vertical: 12),
+          child: Text(
+            text,
+            style: TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+              fontSize: 16,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.grey[800],
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
           ),
         ),
       ),
     );
+  }
+
+  void _toggleAuthMode() {
+    setState(() {
+      _isLogin = !_isLogin;
+    });
+  }
+
+  Future<void> _handleSubmit() async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    final email = _emailController.text.trim();
+    final password = _passwordController.text;
+    
+    try {
+      if (_isLogin) {
+        // 로그인
+        await _authService.signInWithEmailAndPassword(email, password);
+      } else {
+        // 회원가입
+        final displayName = _displayNameController.text.trim();
+        await _authService.createUserWithEmailAndPassword(
+          email, 
+          password,
+          displayName: displayName.isNotEmpty ? displayName : null
+        );
+      }
+      
+      // 메인 페이지로 이동
+      Navigator.of(context).pushReplacementNamed('/main');
+    } catch (e) {
+      String errorMessage = '오류가 발생했습니다. 다시 시도해주세요.';
+      if (e is Exception) {
+        errorMessage = e.toString().replaceAll('Exception: ', '');
+      }
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(errorMessage)),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
   }
 }

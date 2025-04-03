@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'dart:async';
+import '../services/auth_service.dart';
+import '../models/user_model.dart';
 
 class GroupDetailPage extends StatefulWidget {
   final String groupId;
@@ -37,6 +38,12 @@ class _GroupDetailPageState extends State<GroupDetailPage>
   bool _isPaused = false;
   SortOption _currentSortOption = SortOption.latest;
   final ValueNotifier<int> _elapsedSecondsNotifier = ValueNotifier<int>(0);
+
+  // 인증 서비스
+  final AuthService _authService = AuthService();
+  
+  // 현재 사용자
+  UserModel? get _user => _authService.currentUser;
 
   // 키보드 포커스 노드 추가
   final FocusNode _keyboardFocusNode = FocusNode();
@@ -166,8 +173,7 @@ class _GroupDetailPageState extends State<GroupDetailPage>
   }
 
   Future<void> _saveDataToFirestore() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) {
+    if (_user == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('로그인이 필요합니다.')),
       );
@@ -191,8 +197,8 @@ class _GroupDetailPageState extends State<GroupDetailPage>
             '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}',
         'timeOfDay':
             '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}',
-        'userId': user.uid,
-        'userEmail': user.email,
+        'userId': _user!.uid,
+        'userEmail': _user!.email,
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -209,8 +215,7 @@ class _GroupDetailPageState extends State<GroupDetailPage>
 
   Future<void> _updateRecord(
       String docId, String reference, String meetingData) async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
+    if (_user == null) return;
 
     try {
       await FirebaseFirestore.instance
@@ -234,8 +239,7 @@ class _GroupDetailPageState extends State<GroupDetailPage>
   }
 
   Future<void> _deleteRecord(String docId) async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
+    if (_user == null) return;
 
     try {
       await FirebaseFirestore.instance
@@ -328,8 +332,7 @@ class _GroupDetailPageState extends State<GroupDetailPage>
   }
 
   Future<void> _leaveGroup() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) {
+    if (_user == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('로그인이 필요합니다.')),
       );
@@ -377,7 +380,7 @@ class _GroupDetailPageState extends State<GroupDetailPage>
       final String createdBy = groupData['createdBy'] ?? '';
 
       // 그룹 생성자인 경우 탈퇴 불가 (그룹 삭제 기능 추가 필요)
-      if (createdBy == user.uid) {
+      if (createdBy == _user!.uid) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('그룹 생성자는 탈퇴할 수 없습니다. 그룹을 삭제하려면 관리자에게 문의하세요.')),
         );
@@ -385,7 +388,7 @@ class _GroupDetailPageState extends State<GroupDetailPage>
       }
 
       // 멤버 목록에서 사용자 제거
-      members.remove(user.uid);
+      members.remove(_user!.uid);
 
       // 그룹 문서 업데이트
       await FirebaseFirestore.instance
@@ -398,7 +401,7 @@ class _GroupDetailPageState extends State<GroupDetailPage>
       // 사용자의 그룹 목록에서도 제거
       await FirebaseFirestore.instance
           .collection('users')
-          .doc(user.uid)
+          .doc(_user!.uid)
           .collection('groups')
           .doc(widget.groupId)
           .delete();
@@ -496,7 +499,6 @@ class _GroupDetailPageState extends State<GroupDetailPage>
 
   @override
   Widget build(BuildContext context) {
-    final user = FirebaseAuth.instance.currentUser;
     final screenHeight = MediaQuery.of(context).size.height;
     final isSmallScreen = screenHeight <= 150;
 
@@ -737,7 +739,7 @@ class _GroupDetailPageState extends State<GroupDetailPage>
                                             ),
                                           ),
                                           ...docs.map((doc) =>
-                                              _buildListTile(doc, user)),
+                                              _buildListTile(doc, _user)),
                                           Divider(),
                                         ],
                                       );
@@ -810,7 +812,7 @@ class _GroupDetailPageState extends State<GroupDetailPage>
                                             ),
                                           ),
                                           ...docs.map((doc) =>
-                                              _buildListTile(doc, user)),
+                                              _buildListTile(doc, _user)),
                                           Divider(),
                                         ],
                                       );
@@ -821,7 +823,7 @@ class _GroupDetailPageState extends State<GroupDetailPage>
                                 else {
                                   return ListView(
                                     children: sortedDocs
-                                        .map((doc) => _buildListTile(doc, user))
+                                        .map((doc) => _buildListTile(doc, _user))
                                         .toList(),
                                   );
                                 }
@@ -1102,7 +1104,7 @@ class _GroupDetailPageState extends State<GroupDetailPage>
     }
   }
 
-  Widget _buildListTile(DocumentSnapshot document, User? user) {
+  Widget _buildListTile(DocumentSnapshot document, UserModel? user) {
     Map<String, dynamic> data = document.data() as Map<String, dynamic>;
     final isMyRecord = data['userId'] == user?.uid;
 
