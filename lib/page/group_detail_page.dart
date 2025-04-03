@@ -4,6 +4,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:async';
 import '../services/auth_service.dart';
 import '../models/user_model.dart';
+import 'package:window_manager/window_manager.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class GroupDetailPage extends StatefulWidget {
   final String groupId;
@@ -56,10 +58,36 @@ class _GroupDetailPageState extends State<GroupDetailPage>
   // 전역 포커스 변경 감지 구독
   late final StreamSubscription<bool> _focusSubscription;
 
+  // 화면 크기와 고정 상태를 관리하기 위한 변수 추가
+  bool _isAlwaysOnTop = false;  // 기본값을 false로 변경
+
+  // 마지막 상태 로드 시간 추적
+  int _lastLoadTime = 0;
+
+  // 초기 창 설정 함수
+  Future<void> _initializeWindow() async {
+    try {
+      await windowManager.ensureInitialized();
+      
+      // SharedPreferences에서 저장된 화면 고정 상태 가져오기
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      bool savedState = prefs.getBool('is_always_on_top') ?? false;
+      
+      setState(() {
+        _isAlwaysOnTop = savedState;
+      });
+      
+      await windowManager.setAlwaysOnTop(savedState);  // 저장된 값으로 초기화
+    } catch (e) {
+      print('창 초기화 중 오류 발생: $e');
+    }
+  }
+
   @override
   void initState() {
     super.initState();
-
+    _initializeWindow();  // 창 초기화 함수 호출
+    
     // 위젯 바인딩 옵저버 등록
     WidgetsBinding.instance.addObserver(this);
 
@@ -116,7 +144,15 @@ class _GroupDetailPageState extends State<GroupDetailPage>
     // 앱 상태 변경 시 포커스 확인
     if (state == AppLifecycleState.resumed) {
       _checkFocusState();
+      _loadAlwaysOnTopState();  // 앱이 재개될 때 화면 고정 상태 다시 로드
     }
+  }
+
+  // 페이지가 다시 보일 때 화면 고정 상태 확인
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _loadAlwaysOnTopState();  // 페이지가 다시 활성화될 때 화면 고정 상태 다시 로드
   }
 
   void _startTimer() {
@@ -499,6 +535,11 @@ class _GroupDetailPageState extends State<GroupDetailPage>
 
   @override
   Widget build(BuildContext context) {
+    // 페이지가 화면에 보일 때마다 화면 고정 상태 확인
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadAlwaysOnTopState();
+    });
+    
     final screenHeight = MediaQuery.of(context).size.height;
     final isSmallScreen = screenHeight <= 150;
 
@@ -918,6 +959,13 @@ class _GroupDetailPageState extends State<GroupDetailPage>
                                   children: [
                                     IconButton(
                                       icon: Icon(
+                                        _isAlwaysOnTop ? Icons.push_pin : Icons.push_pin_outlined,
+                                        color: _isAlwaysOnTop ? Colors.orange : Colors.grey,
+                                      ),
+                                      onPressed: _toggleAlwaysOnTop,
+                                    ),
+                                    IconButton(
+                                      icon: Icon(
                                         _isPlaying
                                             ? Icons.pause
                                             : Icons.play_arrow,
@@ -1045,6 +1093,13 @@ class _GroupDetailPageState extends State<GroupDetailPage>
                               children: [
                                 IconButton(
                                   icon: Icon(
+                                    _isAlwaysOnTop ? Icons.push_pin : Icons.push_pin_outlined,
+                                    color: _isAlwaysOnTop ? Colors.orange : Colors.grey,
+                                  ),
+                                  onPressed: _toggleAlwaysOnTop,
+                                ),
+                                IconButton(
+                                  icon: Icon(
                                     _isPlaying ? Icons.pause : Icons.play_arrow,
                                     color: _isPlaying
                                         ? Colors.orange
@@ -1154,5 +1209,49 @@ class _GroupDetailPageState extends State<GroupDetailPage>
             }
           : null,
     );
+  }
+
+  // 항상 위에 표시 상태 전환 함수
+  Future<void> _toggleAlwaysOnTop() async {
+    try {
+      setState(() {
+        _isAlwaysOnTop = !_isAlwaysOnTop;
+      });
+      await windowManager.setAlwaysOnTop(_isAlwaysOnTop);
+      
+      // 상태 저장
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('is_always_on_top', _isAlwaysOnTop);
+    } catch (e) {
+      print('화면 고정 상태 변경 중 오류 발생: $e');
+      // 오류 발생 시 상태 되돌리기
+      setState(() {
+        _isAlwaysOnTop = !_isAlwaysOnTop;
+      });
+    }
+  }
+
+  // 화면 고정 상태 불러오기
+  Future<void> _loadAlwaysOnTopState() async {
+    // 너무 자주 호출되는 것 방지 (500ms 이내 호출 무시)
+    int now = DateTime.now().millisecondsSinceEpoch;
+    if (now - _lastLoadTime < 500) return;
+    _lastLoadTime = now;
+    
+    try {
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      bool savedState = prefs.getBool('is_always_on_top') ?? false;
+      
+      // 현재 상태와 다를 때만 업데이트
+      if (_isAlwaysOnTop != savedState) {
+        setState(() {
+          _isAlwaysOnTop = savedState;
+        });
+        
+        await windowManager.setAlwaysOnTop(savedState);
+      }
+    } catch (e) {
+      print('화면 고정 상태 불러오기 중 오류 발생: $e');
+    }
   }
 }

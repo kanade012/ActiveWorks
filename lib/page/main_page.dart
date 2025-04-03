@@ -7,6 +7,8 @@ import 'package:planner/page/login_page.dart';
 import 'package:planner/page/create_group_page.dart';
 import 'package:planner/page/join_group_page.dart';
 import 'package:planner/page/group_list_page.dart';
+import 'package:window_manager/window_manager.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../services/auth_service.dart';
 import '../models/user_model.dart';
 
@@ -50,10 +52,92 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
   final AuthService _authService = AuthService();
   UserModel? get _user => _authService.currentUser;
 
+  // 화면 크기와 고정 상태를 관리하기 위한 변수 추가
+  bool _isExpanded = false;
+  bool _isAlwaysOnTop = false;  // 기본값을 false로 변경
+
+  // 마지막 상태 로드 시간 추적
+  int _lastLoadTime = 0;
+
+  // 항상 위에 표시 상태 전환 함수
+  Future<void> _toggleAlwaysOnTop() async {
+    try {
+      setState(() {
+        _isAlwaysOnTop = !_isAlwaysOnTop;
+      });
+      await windowManager.setAlwaysOnTop(_isAlwaysOnTop);
+      
+      // 상태 저장
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('is_always_on_top', _isAlwaysOnTop);
+    } catch (e) {
+      print('화면 고정 상태 변경 중 오류 발생: $e');
+      // 오류 발생 시 상태 되돌리기
+      setState(() {
+        _isAlwaysOnTop = !_isAlwaysOnTop;
+      });
+    }
+  }
+
+  // 화면 고정 상태 불러오기
+  Future<void> _loadAlwaysOnTopState() async {
+    // 너무 자주 호출되는 것 방지 (500ms 이내 호출 무시)
+    int now = DateTime.now().millisecondsSinceEpoch;
+    if (now - _lastLoadTime < 500) return;
+    _lastLoadTime = now;
+    
+    try {
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      bool savedState = prefs.getBool('is_always_on_top') ?? false;
+      
+      // 현재 상태와 다를 때만 업데이트
+      if (_isAlwaysOnTop != savedState) {
+        setState(() {
+          _isAlwaysOnTop = savedState;
+        });
+        
+        await windowManager.setAlwaysOnTop(savedState);
+      }
+    } catch (e) {
+      print('화면 고정 상태 불러오기 중 오류 발생: $e');
+    }
+  }
+
+  // 초기 창 설정 함수
+  Future<void> _initializeWindow() async {
+    try {
+      await windowManager.ensureInitialized();
+      
+      WindowOptions windowOptions = WindowOptions(
+        size: Size(800, 20),
+        center: true,
+        backgroundColor: Colors.transparent,
+        skipTaskbar: false,
+      );
+      
+      // SharedPreferences에서 저장된 화면 고정 상태 가져오기
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      bool savedState = prefs.getBool('is_always_on_top') ?? false;
+      
+      setState(() {
+        _isAlwaysOnTop = savedState;
+      });
+      
+      await windowManager.waitUntilReadyToShow(windowOptions, () async {
+        await windowManager.show();
+        await windowManager.focus();
+        await windowManager.setAlwaysOnTop(savedState);  // 저장된 값으로 초기화
+      });
+    } catch (e) {
+      print('창 초기화 중 오류 발생: $e');
+    }
+  }
+
   @override
   void initState() {
     super.initState();
     _initializeFirebase();
+    _loadAlwaysOnTopState();  // 저장된 화면 고정 상태 불러오기
     
     // 위젯 바인딩 옵저버 등록
     WidgetsBinding.instance.addObserver(this);
@@ -269,7 +353,15 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
     // 앱 상태 변경 시 포커스 확인
     if (state == AppLifecycleState.resumed) {
       _checkFocusState();
+      _loadAlwaysOnTopState();  // 앱이 재개될 때 화면 고정 상태 다시 로드
     }
+  }
+
+  // 페이지가 다시 보일 때 화면 고정 상태 확인
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _loadAlwaysOnTopState();  // 페이지가 다시 활성화될 때 화면 고정 상태 다시 로드
   }
 
   void _setupFocusNodes() {
@@ -392,6 +484,11 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
+    // 페이지가 화면에 보일 때마다 화면 고정 상태 확인
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadAlwaysOnTopState();
+    });
+    
     // 화면 높이 구하기
     final screenHeight = MediaQuery.of(context).size.height;
     final isSmallScreen = screenHeight <= 150;
@@ -721,90 +818,97 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
                         onFocusChange: (hasFocus) {
                           _checkFocusState();
                         },
-                        child: GestureDetector(
-                          child: Padding(
-                            padding: EdgeInsets.symmetric(horizontal: 10),
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.center,
-                              children: [
-                                // 제목과 부제목 입력 필드 유지
-                                Expanded(
-                                  child: TextField(
-                                    focusNode: _referenceFocusNode, // 포커스 노드 할당
-                                    controller: _referenceController,
-                                    decoration: InputDecoration(
-                                        hintText: "제목", border: InputBorder.none),
-                                    onChanged: (value) => _reference = value,
-                                    onSubmitted: (_) => _unfocusTextFields(),
+                        child: Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 10),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              // 제목과 부제목 입력 필드 유지
+                              Expanded(
+                                child: TextField(
+                                  focusNode: _referenceFocusNode, // 포커스 노드 할당
+                                  controller: _referenceController,
+                                  decoration: InputDecoration(
+                                      hintText: "제목", border: InputBorder.none),
+                                  onChanged: (value) => _reference = value,
+                                  onSubmitted: (_) => _unfocusTextFields(),
+                                ),
+                              ),
+                              Expanded(
+                                child: TextField(
+                                  focusNode: _meetingDataFocusNode, // 포커스 노드 할당
+                                  controller: _meetingDataController,
+                                  decoration: InputDecoration(
+                                      hintText: "부제목", border: InputBorder.none),
+                                  onChanged: (value) => _meetingData = value,
+                                  onSubmitted: (_) => _unfocusTextFields(),
+                                ),
+                              ),
+                              VerticalDivider(),
+                              Padding(padding: EdgeInsets.symmetric(horizontal: 4)),
+                              ValueListenableBuilder(
+                                valueListenable: _elapsedSecondsNotifier,
+                                builder: (context, value, child) {
+                                  final minutes = value ~/ 60;
+                                  final seconds = (value % 60).toString().padLeft(2, '0');
+                                  return Text(
+                                    '$minutes:$seconds',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  );
+                                },
+                              ),
+                              Padding(padding: EdgeInsets.symmetric(horizontal: 2)),
+
+                              // 타이머 제어 버튼들
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  // 화면 고정 버튼
+                                  IconButton(
+                                    icon: Icon(
+                                      _isAlwaysOnTop ? Icons.push_pin : Icons.push_pin_outlined,
+                                      color: _isAlwaysOnTop ? Colors.orange : Colors.grey,
+                                    ),
+                                    onPressed: _toggleAlwaysOnTop,
                                   ),
-                                ),
-                                Expanded(
-                                  child: TextField(
-                                    focusNode: _meetingDataFocusNode, // 포커스 노드 할당
-                                    controller: _meetingDataController,
-                                    decoration: InputDecoration(
-                                        hintText: "부제목", border: InputBorder.none),
-                                    onChanged: (value) => _meetingData = value,
-                                    onSubmitted: (_) => _unfocusTextFields(),
+                                  
+                                  // 재생/일시정지 버튼
+                                  IconButton(
+                                    icon: Icon(
+                                      _isPlaying ? Icons.pause : Icons.play_arrow,
+                                      color: _isPlaying ? Colors.orange : Colors.purple,
+                                    ),
+                                    onPressed: () {
+                                      if (_isPlaying) {
+                                        _pauseTimer();
+                                      } else {
+                                        _startTimer();
+                                      }
+                                    },
                                   ),
-                                ),
-                                VerticalDivider(),
-                                Padding(padding: EdgeInsets.symmetric(horizontal: 4)),
-                                ValueListenableBuilder(
-                                  valueListenable: _elapsedSecondsNotifier,
-                                  builder: (context, value, child) {
-                                    final minutes = value ~/ 60;
-                                    final seconds = (value % 60).toString().padLeft(2, '0');
-                                    return Text(
-                                      '$minutes:$seconds',
-                                      style: TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    );
-                                  },
-                                ),
-                                Padding(padding: EdgeInsets.symmetric(horizontal: 2)),
-                                
-                                // 타이머 제어 버튼들
-                                Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    // 재생/일시정지 버튼
-                                    IconButton(
-                                      icon: Icon(
-                                        _isPlaying ? Icons.pause : Icons.play_arrow,
-                                        color: _isPlaying ? Colors.orange : Colors.purple,
-                                      ),
-                                      onPressed: () {
-                                        if (_isPlaying) {
-                                          _pauseTimer();
-                                        } else {
-                                          _startTimer();
-                                        }
-                                      },
-                                    ),
-                                    
-                                    // 완료 버튼 (정지 및 저장)
-                                    IconButton(
-                                      icon: Icon(Icons.stop, color: Colors.red),
-                                      onPressed: (_isPlaying || _isPaused) ? _stopTimer : null,
-                                    ),
-                                    
-                                    // 취소 버튼 (리셋)
-                                    ValueListenableBuilder(
-                                      valueListenable: _elapsedSecondsNotifier,
-                                      builder: (context, value, _) {
-                                        return IconButton(
-                                          icon: Icon(Icons.cancel, color: Colors.grey),
-                                          onPressed: value > 0 ? _resetTimer : null,
-                                        );
-                                      },
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
+
+                                  // 완료 버튼 (정지 및 저장)
+                                  IconButton(
+                                    icon: Icon(Icons.stop, color: Colors.red),
+                                    onPressed: (_isPlaying || _isPaused) ? _stopTimer : null,
+                                  ),
+
+                                  // 취소 버튼 (리셋)
+                                  ValueListenableBuilder(
+                                    valueListenable: _elapsedSecondsNotifier,
+                                    builder: (context, value, _) {
+                                      return IconButton(
+                                        icon: Icon(Icons.cancel, color: Colors.grey),
+                                        onPressed: value > 0 ? _resetTimer : null,
+                                      );
+                                    },
+                                  ),
+                                ],
+                              ),
+                            ],
                           ),
                         ),
                       ),
@@ -893,6 +997,15 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
                               Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
+                                  // 화면 고정 버튼
+                                  IconButton(
+                                    icon: Icon(
+                                      _isAlwaysOnTop ? Icons.push_pin : Icons.push_pin_outlined,
+                                      color: _isAlwaysOnTop ? Colors.orange : Colors.grey,
+                                    ),
+                                    onPressed: _toggleAlwaysOnTop,
+                                  ),
+                                  
                                   // 재생/일시정지 버튼
                                   IconButton(
                                     icon: Icon(

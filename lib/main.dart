@@ -28,7 +28,6 @@ void main() async {
   await windowManager.waitUntilReadyToShow(windowOptions, () async {
     await windowManager.show();
     await windowManager.focus();
-    await windowManager.setAlwaysOnTop(true);
   });
 
   // AuthService 초기화
