@@ -79,7 +79,7 @@ class _GroupDetailPageState extends State<GroupDetailPage>
       if (_isExpanded) {
         await windowManager.setSize(Size(currentSize.width, 600));
       } else {
-        await windowManager.setSize(Size(currentSize.width, 80));
+        await windowManager.setSize(Size(currentSize.width, 50));
       }
     } catch (e) {
       print('화면 크기 변경 중 오류 발생: $e');
@@ -152,7 +152,7 @@ class _GroupDetailPageState extends State<GroupDetailPage>
       Size currentSize = Size(800, 600);
       
       WindowOptions windowOptions = WindowOptions(
-        size: _isExpanded ? Size(currentSize.width, 600) : Size(currentSize.width, 80),
+        size: _isExpanded ? Size(currentSize.width, 600) : Size(currentSize.width, 50),
         center: true,
         backgroundColor: Colors.transparent,
         skipTaskbar: false,
@@ -640,118 +640,126 @@ class _GroupDetailPageState extends State<GroupDetailPage>
         child: Scaffold(
           appBar: isSmallScreen
               ? null
-              : AppBar(
-                  title: Text(widget.groupName),
-                  backgroundColor: Color(0xFFF9FAFC),
-                  scrolledUnderElevation: 0,
-                  shadowColor: Colors.transparent,
-                  elevation: 0,
-                  forceMaterialTransparency: false,
-                  actions: [
-                    StreamBuilder<DocumentSnapshot>(
-                      stream: FirebaseFirestore.instance
-                          .collection('groups')
-                          .doc(widget.groupId)
-                          .snapshots(),
-                      builder: (context, snapshot) {
-                        if (!snapshot.hasData) return SizedBox();
-                        
-                        return IconButton(
-                          icon: Icon(Icons.file_copy_outlined, 
-                            color: Colors.black, 
-                            size: 20
+              : PreferredSize(
+            preferredSize: Size.fromHeight(70),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    AppBar(
+                        title: Text(widget.groupName),
+                        backgroundColor: Color(0xFFF9FAFC),
+                        scrolledUnderElevation: 0,
+                        shadowColor: Colors.transparent,
+                        elevation: 0,
+                        forceMaterialTransparency: false,
+                        actions: [
+                          StreamBuilder<DocumentSnapshot>(
+                            stream: FirebaseFirestore.instance
+                                .collection('groups')
+                                .doc(widget.groupId)
+                                .snapshots(),
+                            builder: (context, snapshot) {
+                              if (!snapshot.hasData) return SizedBox();
+
+                              return IconButton(
+                                icon: Icon(Icons.file_copy_outlined,
+                                  color: Colors.black,
+                                  size: 20
+                                ),
+                                onPressed: () async {
+                                  final groupData = snapshot.data!.data() as Map<String, dynamic>;
+                                  final joinCode = groupData['joinCode'];
+                                  if (joinCode != null) {
+                                    await Clipboard.setData(ClipboardData(text: joinCode));
+
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text("참여 코드가 복사되었습니다.\n코드: $joinCode"),
+                                        duration: Duration(seconds: 2),
+                                      ),
+                                    );
+                                  } else {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text("참여 코드를 찾을 수 없습니다."),
+                                        duration: Duration(seconds: 2),
+                                      ),
+                                    );
+                                  }
+                                },
+                                tooltip: '참여 코드 복사',
+                              );
+                            },
                           ),
-                          onPressed: () async {
-                            final groupData = snapshot.data!.data() as Map<String, dynamic>;
-                            final joinCode = groupData['joinCode'];
-                            if (joinCode != null) {
-                              await Clipboard.setData(ClipboardData(text: joinCode));
-                              
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text("참여 코드가 복사되었습니다.\n코드: $joinCode"),
-                                  duration: Duration(seconds: 2),
-                                ),
-                              );
-                            } else {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text("참여 코드를 찾을 수 없습니다."),
-                                  duration: Duration(seconds: 2),
-                                ),
-                              );
-                            }
-                          },
-                          tooltip: '참여 코드 복사',
-                        );
-                      },
-                    ),
-                    PopupMenuButton<SortOption>(
-                      color: Colors.white,
-                      icon: Row(
-                        children: [
-                          Text('정렬 : ${_getSortOptionText(_currentSortOption)}',
-                              style:
-                                  TextStyle(fontSize: 14, color: Colors.black)),
-                          Icon(Icons.arrow_drop_down, color: Colors.black),
-                        ],
-                      ),
-                      onSelected: (SortOption option) {
-                        _changeSortOption(option);
-                      },
-                      itemBuilder: (BuildContext context) =>
-                          <PopupMenuEntry<SortOption>>[
-                        PopupMenuItem<SortOption>(
-                          value: SortOption.latest,
-                          child: Text('최신순',
-                              style: TextStyle(color: Colors.black)),
-                        ),
-                        PopupMenuItem<SortOption>(
-                          value: SortOption.oldest,
-                          child: Text('오래된순',
-                              style: TextStyle(color: Colors.black)),
-                        ),
-                        PopupMenuItem<SortOption>(
-                          value: SortOption.time,
-                          child: Text('기록 시간순',
-                              style: TextStyle(color: Colors.black)),
-                        ),
-                        PopupMenuItem<SortOption>(
-                          value: SortOption.person,
-                          child: Text('사람별',
-                              style: TextStyle(color: Colors.black)),
-                        ),
-                        PopupMenuItem<SortOption>(
-                          value: SortOption.date,
-                          child: Text('날짜별',
-                              style: TextStyle(color: Colors.black)),
-                        ),
-                      ],
-                    ),
-                    PopupMenuButton<String>(
-                      color: Colors.white,
-                      onSelected: (value) {
-                        if (value == 'leave') {
-                          _leaveGroup();
-                        }
-                      },
-                      itemBuilder: (BuildContext context) =>
-                          <PopupMenuEntry<String>>[
-                        PopupMenuItem<String>(
-                          value: 'leave',
-                          child: Row(
-                            children: [
-                              Icon(Icons.exit_to_app, color: Colors.red),
-                              SizedBox(width: 8),
-                              Text('그룹 탈퇴',
-                                  style: TextStyle(color: Colors.red)),
+                          PopupMenuButton<SortOption>(
+                            color: Colors.white,
+                            icon: Row(
+                              children: [
+                                Text('정렬 : ${_getSortOptionText(_currentSortOption)}',
+                                    style:
+                                        TextStyle(fontSize: 14, color: Colors.black)),
+                                Icon(Icons.arrow_drop_down, color: Colors.black),
+                              ],
+                            ),
+                            onSelected: (SortOption option) {
+                              _changeSortOption(option);
+                            },
+                            itemBuilder: (BuildContext context) =>
+                                <PopupMenuEntry<SortOption>>[
+                              PopupMenuItem<SortOption>(
+                                value: SortOption.latest,
+                                child: Text('최신순',
+                                    style: TextStyle(color: Colors.black)),
+                              ),
+                              PopupMenuItem<SortOption>(
+                                value: SortOption.oldest,
+                                child: Text('오래된순',
+                                    style: TextStyle(color: Colors.black)),
+                              ),
+                              PopupMenuItem<SortOption>(
+                                value: SortOption.time,
+                                child: Text('기록 시간순',
+                                    style: TextStyle(color: Colors.black)),
+                              ),
+                              PopupMenuItem<SortOption>(
+                                value: SortOption.person,
+                                child: Text('사람별',
+                                    style: TextStyle(color: Colors.black)),
+                              ),
+                              PopupMenuItem<SortOption>(
+                                value: SortOption.date,
+                                child: Text('날짜별',
+                                    style: TextStyle(color: Colors.black)),
+                              ),
                             ],
                           ),
-                        ),
-                      ],
-                    ),
+                          PopupMenuButton<String>(
+                            color: Colors.white,
+                            onSelected: (value) {
+                              if (value == 'leave') {
+                                _leaveGroup();
+                              }
+                            },
+                            itemBuilder: (BuildContext context) =>
+                                <PopupMenuEntry<String>>[
+                              PopupMenuItem<String>(
+                                value: 'leave',
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.exit_to_app, color: Colors.red),
+                                    SizedBox(width: 8),
+                                    Text('그룹 탈퇴',
+                                        style: TextStyle(color: Colors.red)),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
                   ],
                 ),
+              ),
           backgroundColor:
               isSmallScreen ? Colors.transparent : Color(0xFFF9FAFC),
           body: GestureDetector(
@@ -979,6 +987,7 @@ class _GroupDetailPageState extends State<GroupDetailPage>
                             child: Row(
                               crossAxisAlignment: CrossAxisAlignment.center,
                               children: [
+                                Padding(padding: EdgeInsets.symmetric(horizontal: 30)),
                                 Expanded(
                                   child: Focus(
                                     onFocusChange: (hasFocus) {

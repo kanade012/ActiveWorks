@@ -20,12 +20,20 @@ class _GroupListPageState extends State<GroupListPage> {
     
     return Scaffold(
       backgroundColor: Color(0xFFF9FAFC),
-      appBar: AppBar(
-        backgroundColor: Color(0xFFF9FAFC),
-        title: Text('내 그룹'),
-        scrolledUnderElevation: 0,
-        shadowColor: Colors.transparent,
-        elevation: 0,
+      appBar: PreferredSize(
+        preferredSize: Size.fromHeight(70),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            AppBar(
+              backgroundColor: Color(0xFFF9FAFC),
+              title: Text('내 그룹'),
+              scrolledUnderElevation: 0,
+              shadowColor: Colors.transparent,
+              elevation: 0,
+            ),
+          ],
+        ),
       ),
       body: user == null
           ? Center(child: Text('로그인이 필요합니다.'))

@@ -73,7 +73,7 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
       if (_isExpanded) {
         await windowManager.setSize(Size(currentSize.width, 600));
       } else {
-        await windowManager.setSize(Size(currentSize.width, 80));
+        await windowManager.setSize(Size(currentSize.width, 50));
       }
     } catch (e) {
       print('화면 크기 변경 중 오류 발생: $e');
@@ -146,7 +146,7 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
       Size currentSize = Size(800, 600);
       
       WindowOptions windowOptions = WindowOptions(
-        size: _isExpanded ? Size(currentSize.width, 600) : Size(currentSize.width, 80),
+        size: _isExpanded ? Size(currentSize.width, 600) : Size(currentSize.width, 50),
         center: true,
         backgroundColor: Colors.transparent,
         skipTaskbar: false,
@@ -534,127 +534,135 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
         autofocus: true,
         child: Scaffold(
           // 작은 화면에서는 앱바 숨기기
-          appBar: isSmallScreen ? null : AppBar(
-            backgroundColor: Color(0xFFF9FAFC), // 배경색 검정
-            title: Text('My workspace'),
-            // 스크롤 할 때 앱바 색이 변경되지 않도록 설정
-            scrolledUnderElevation: 0, // 스크롤 시 높이 효과 제거
-            shadowColor: Colors.transparent, // 그림자 색상 투명하게
-            elevation: 0, // 앱바 높이 효과 제거
-            forceMaterialTransparency: false, // 머티리얼 효과 제거
-            
-            actions: [
-              // 정렬 버튼을 드롭다운으로 변경
-              PopupMenuButton<SortOption>(
-                color: Colors.white,
-                icon: Row(
-                  children: [
-                    Text('정렬 : ${_getSortOptionText(_currentSortOption)}',
-                      style: TextStyle(fontSize: 14, color: Colors.black)),
-                    Icon(Icons.arrow_drop_down, color: Colors.black),
+          appBar: isSmallScreen ? null : PreferredSize(
+            preferredSize: Size.fromHeight(70),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                AppBar(
+                  backgroundColor: Color(0xFFF9FAFC), // 배경색 검정
+                  title: Text('My workspace'),
+                  // 스크롤 할 때 앱바 색이 변경되지 않도록 설정
+                  scrolledUnderElevation: 0, // 스크롤 시 높이 효과 제거
+                  shadowColor: Colors.transparent, // 그림자 색상 투명하게
+                  elevation: 0, // 앱바 높이 효과 제거
+                  forceMaterialTransparency: false, // 머티리얼 효과 제거
+
+                  actions: [
+                    // 정렬 버튼을 드롭다운으로 변경
+                    PopupMenuButton<SortOption>(
+                      color: Colors.white,
+                      icon: Row(
+                        children: [
+                          Text('정렬 : ${_getSortOptionText(_currentSortOption)}',
+                            style: TextStyle(fontSize: 14, color: Colors.black)),
+                          Icon(Icons.arrow_drop_down, color: Colors.black),
+                        ],
+                      ),
+                      onSelected: (SortOption option) {
+                        _changeSortOption(option);
+                      },
+                      itemBuilder: (BuildContext context) => <PopupMenuEntry<SortOption>>[
+                        PopupMenuItem<SortOption>(
+                          value: SortOption.latest,
+                          child: Text('최신순', style: TextStyle(color: Colors.black)),
+                        ),
+                        PopupMenuItem<SortOption>(
+                          value: SortOption.oldest,
+                          child: Text('오래된순', style: TextStyle(color: Colors.black)),
+                        ),
+                        PopupMenuItem<SortOption>(
+                          value: SortOption.time,
+                          child: Text('기록 시간순', style: TextStyle(color: Colors.black)),
+                        ),
+                        PopupMenuItem<SortOption>(
+                          value: SortOption.date,
+                          child: Text('날짜별', style: TextStyle(color: Colors.black)),
+                        ),
+                      ],
+                    ),
+                    // 햄버거 메뉴를 PopupMenuButton으로 변경
+                    PopupMenuButton<String>(
+                      color: Colors.white,
+                      icon: Icon(Icons.menu, color: Colors.black),
+                      onSelected: (String value) {
+                        switch (value) {
+                          case 'logout':
+                            _logout();
+                            break;
+                          case 'create_group':
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => CreateGroupPage(),
+                              ),
+                            );
+                            break;
+                          case 'join_group':
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => JoinGroupPage(),
+                              ),
+                            );
+                            break;
+                          case 'view_groups':
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => GroupListPage(),
+                              ),
+                            );
+                            break;
+                        }
+                      },
+                      itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+                        PopupMenuItem<String>(
+                          value: 'logout',
+                          child: Row(
+                            children: [
+                              Icon(Icons.logout, color: Colors.black),
+                              SizedBox(width: 8),
+                              Text('로그아웃', style: TextStyle(color: Colors.black)),
+                            ],
+                          ),
+                        ),
+                        PopupMenuItem<String>(
+                          value: 'create_group',
+                          child: Row(
+                            children: [
+                              Icon(Icons.group_add, color: Colors.black),
+                              SizedBox(width: 8),
+                              Text('그룹생성', style: TextStyle(color: Colors.black)),
+                            ],
+                          ),
+                        ),
+                        PopupMenuItem<String>(
+                          value: 'join_group',
+                          child: Row(
+                            children: [
+                              Icon(Icons.person_add, color: Colors.black),
+                              SizedBox(width: 8),
+                              Text('그룹참가', style: TextStyle(color: Colors.black)),
+                            ],
+                          ),
+                        ),
+                        PopupMenuItem<String>(
+                          value: 'view_groups',
+                          child: Row(
+                            children: [
+                              Icon(Icons.groups, color: Colors.black),
+                              SizedBox(width: 8),
+                              Text('그룹보기', style: TextStyle(color: Colors.black)),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
                   ],
                 ),
-                onSelected: (SortOption option) {
-                  _changeSortOption(option);
-                },
-                itemBuilder: (BuildContext context) => <PopupMenuEntry<SortOption>>[
-                  PopupMenuItem<SortOption>(
-                    value: SortOption.latest,
-                    child: Text('최신순', style: TextStyle(color: Colors.black)),
-                  ),
-                  PopupMenuItem<SortOption>(
-                    value: SortOption.oldest,
-                    child: Text('오래된순', style: TextStyle(color: Colors.black)),
-                  ),
-                  PopupMenuItem<SortOption>(
-                    value: SortOption.time,
-                    child: Text('기록 시간순', style: TextStyle(color: Colors.black)),
-                  ),
-                  PopupMenuItem<SortOption>(
-                    value: SortOption.date,
-                    child: Text('날짜별', style: TextStyle(color: Colors.black)),
-                  ),
-                ],
-              ),
-              // 햄버거 메뉴를 PopupMenuButton으로 변경
-              PopupMenuButton<String>(
-                color: Colors.white,
-                icon: Icon(Icons.menu, color: Colors.black),
-                onSelected: (String value) {
-                  switch (value) {
-                    case 'logout':
-                      _logout();
-                      break;
-                    case 'create_group':
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => CreateGroupPage(),
-                        ),
-                      );
-                      break;
-                    case 'join_group':
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => JoinGroupPage(),
-                        ),
-                      );
-                      break;
-                    case 'view_groups':
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => GroupListPage(),
-                        ),
-                      );
-                      break;
-                  }
-                },
-                itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
-                  PopupMenuItem<String>(
-                    value: 'logout',
-                    child: Row(
-                      children: [
-                        Icon(Icons.logout, color: Colors.black),
-                        SizedBox(width: 8),
-                        Text('로그아웃', style: TextStyle(color: Colors.black)),
-                      ],
-                    ),
-                  ),
-                  PopupMenuItem<String>(
-                    value: 'create_group',
-                    child: Row(
-                      children: [
-                        Icon(Icons.group_add, color: Colors.black),
-                        SizedBox(width: 8),
-                        Text('그룹생성', style: TextStyle(color: Colors.black)),
-                      ],
-                    ),
-                  ),
-                  PopupMenuItem<String>(
-                    value: 'join_group',
-                    child: Row(
-                      children: [
-                        Icon(Icons.person_add, color: Colors.black),
-                        SizedBox(width: 8),
-                        Text('그룹참가', style: TextStyle(color: Colors.black)),
-                      ],
-                    ),
-                  ),
-                  PopupMenuItem<String>(
-                    value: 'view_groups',
-                    child: Row(
-                      children: [
-                        Icon(Icons.groups, color: Colors.black),
-                        SizedBox(width: 8),
-                        Text('그룹보기', style: TextStyle(color: Colors.black)),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ],
+              ],
+            ),
           ),
           // 작은 화면에서는 배경 투명하게 설정
           backgroundColor: isSmallScreen ? Colors.transparent : Color(0xFFF9FAFC),
@@ -690,10 +698,10 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
                                 if (snapshot.data == null || snapshot.data!.docs.isEmpty) {
                                   return Center(child: Text('저장된 데이터가 없습니다.'));
                                 }
-                                
+
                                 // 클라이언트에서 정렬 처리
                                 List<DocumentSnapshot> sortedDocs = List.from(snapshot.data!.docs);
-                                
+
                                 if (_currentSortOption == SortOption.time) {
                                   sortedDocs.sort((a, b) {
                                     final aData = a.data() as Map<String, dynamic>;
@@ -703,7 +711,7 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
                                     return bTime.compareTo(aTime); // 내림차순 정렬
                                   });
                                 }
-                                
+
                                 // 현재 정렬이 날짜별인 경우 날짜별로 그룹화
                                 if (_currentSortOption == SortOption.date) {
                                   // 날짜로 정렬
@@ -721,28 +729,28 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
                                     }
                                     return compare;
                                   });
-                                  
+
                                   Map<String, List<DocumentSnapshot>> groupedByDate = {};
-                                  
+
                                   for (var doc in sortedDocs) {
                                     Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
                                     String date = data['date'] ?? '날짜 없음';
-                                    
+
                                     if (!groupedByDate.containsKey(date)) {
                                       groupedByDate[date] = [];
                                     }
                                     groupedByDate[date]!.add(doc);
                                   }
-                                  
+
                                   List<String> sortedDates = groupedByDate.keys.toList()
                                     ..sort((a, b) => b.compareTo(a)); // 최신 날짜가 먼저 오도록
-                                  
+
                                   return ListView.builder(
                                     itemCount: sortedDates.length,
                                     itemBuilder: (context, index) {
                                       String date = sortedDates[index];
                                       List<DocumentSnapshot> docs = groupedByDate[date]!;
-                                      
+
                                       return Column(
                                         crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
@@ -764,9 +772,9 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
                                               splashColor: Colors.transparent,
                                               onTap: () {
                                                 _showEditDialog(
-                                                  context, 
+                                                  context,
                                                   doc.id,
-                                                  data['reference'], 
+                                                  data['reference'],
                                                   data['meetingData'],
                                                   date: data['date'],
                                                   timeOfDay: data['timeOfDay'],
@@ -803,9 +811,9 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
                                         splashColor: Colors.transparent,
                                         onTap: () {
                                           _showEditDialog(
-                                            context, 
+                                            context,
                                             document.id,
-                                            data['reference'], 
+                                            data['reference'],
                                             data['meetingData'],
                                             date: data['date'],
                                             timeOfDay: data['timeOfDay'],
@@ -834,7 +842,7 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
                       ],
                     ),
                   ),
-                
+
                 // 타이머 위치 조정 (작은 화면인 경우 화면에 맞게 조정)
                 if (isSmallScreen)
                   Container(
@@ -853,6 +861,7 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
                           child: Row(
                             crossAxisAlignment: CrossAxisAlignment.center,
                             children: [
+                              Padding(padding: EdgeInsets.symmetric(horizontal: 30)),
                               // 제목과 부제목 입력 필드 유지
                               Expanded(
                                 child: TextField(
@@ -904,7 +913,7 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
                                     ),
                                     onPressed: _toggleExpand,
                                   ),
-                                  
+
                                   // 화면 고정 버튼
                                   IconButton(
                                     icon: Icon(
@@ -913,7 +922,7 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
                                     ),
                                     onPressed: _toggleAlwaysOnTop,
                                   ),
-                                  
+
                                   // 재생/일시정지 버튼
                                   IconButton(
                                     icon: Icon(
@@ -1031,7 +1040,7 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
                                 },
                               ),
                               Padding(padding: EdgeInsets.symmetric(horizontal: 2)),
-                              
+
                               // 타이머 제어 버튼들
                               Row(
                                 mainAxisSize: MainAxisSize.min,
@@ -1044,7 +1053,7 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
                                     ),
                                     onPressed: _toggleExpand,
                                   ),
-                                  
+
                                   // 화면 고정 버튼
                                   IconButton(
                                     icon: Icon(
@@ -1053,7 +1062,7 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
                                     ),
                                     onPressed: _toggleAlwaysOnTop,
                                   ),
-                                  
+
                                   // 재생/일시정지 버튼
                                   IconButton(
                                     icon: Icon(
@@ -1068,13 +1077,13 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
                                       }
                                     },
                                   ),
-                                  
+
                                   // 완료 버튼 (정지 및 저장)
                                   IconButton(
                                     icon: Icon(Icons.stop, color: Colors.red),
                                     onPressed: (_isPlaying || _isPaused) ? _stopTimer : null,
                                   ),
-                                  
+
                                   // 취소 버튼 (리셋)
                                   ValueListenableBuilder(
                                     valueListenable: _elapsedSecondsNotifier,

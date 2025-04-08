@@ -19,12 +19,20 @@ class _JoinGroupPageState extends State<JoinGroupPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Color(0xFFF9FAFC),
-      appBar: AppBar(
-        backgroundColor: Color(0xFFF9FAFC),
-        title: Text('그룹 참가'),
-        scrolledUnderElevation: 0,
-        shadowColor: Colors.transparent,
-        elevation: 0,
+      appBar: PreferredSize(
+        preferredSize: Size.fromHeight(70),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            AppBar(
+              backgroundColor: Color(0xFFF9FAFC),
+              title: Text('그룹 참가'),
+              scrolledUnderElevation: 0,
+              shadowColor: Colors.transparent,
+              elevation: 0,
+            ),
+          ],
+        ),
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),

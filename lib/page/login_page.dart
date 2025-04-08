@@ -18,9 +18,17 @@ class _AuthPageState extends State<AuthPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
-      appBar: AppBar(
-        backgroundColor: Colors.black,
-        title: Text(_isLogin ? '로그인' : '회원가입', style: TextStyle(color: Colors.white)),
+      appBar: PreferredSize(
+        preferredSize: Size.fromHeight(70),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            AppBar(
+              backgroundColor: Colors.black,
+              title: Text(_isLogin ? '로그인' : '회원가입', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        ),
       ),
       body: Padding(
         padding: EdgeInsets.all(16.0),

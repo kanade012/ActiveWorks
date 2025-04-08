@@ -20,8 +20,8 @@ void main() async {
     size: Size(800, 600),
     center: true,
     backgroundColor: Colors.transparent,
-    skipTaskbar: false,
-    // titleBarStyle: TitleBarStyle.hidden,
+    skipTaskbar: true,
+    titleBarStyle: TitleBarStyle.hidden,
   );
   
   // window_manager 설정 적용
