@@ -40,6 +40,7 @@ class _GroupDetailPageState extends State<GroupDetailPage>
   bool _isPaused = false;
   SortOption _currentSortOption = SortOption.latest;
   final ValueNotifier<int> _elapsedSecondsNotifier = ValueNotifier<int>(0);
+  final ValueNotifier<int> _totalTimeNotifier = ValueNotifier<int>(0);
 
   // 인증 서비스
   final AuthService _authService = AuthService();
@@ -172,6 +173,7 @@ class _GroupDetailPageState extends State<GroupDetailPage>
   void initState() {
     super.initState();
     _initializeWindow();  // 창 초기화 함수 호출
+    _loadTotalTime();  // 총 기록 시간 로드
     
     // 위젯 바인딩 옵저버 등록
     WidgetsBinding.instance.addObserver(this);
@@ -303,6 +305,7 @@ class _GroupDetailPageState extends State<GroupDetailPage>
 
     try {
       final now = DateTime.now();
+      final int currentTime = _elapsedSecondsNotifier.value;
 
       // 그룹 기록에 저장
       await FirebaseFirestore.instance
@@ -312,7 +315,7 @@ class _GroupDetailPageState extends State<GroupDetailPage>
           .add({
         'reference': _reference,
         'meetingData': _meetingData,
-        'time': _elapsedSecondsNotifier.value,
+        'time': currentTime,
         'timestamp': FieldValue.serverTimestamp(),
         'date':
             '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}',
@@ -321,6 +324,9 @@ class _GroupDetailPageState extends State<GroupDetailPage>
         'userId': _user!.uid,
         'userEmail': _user!.email,
       });
+
+      // 총 시간 업데이트
+      _totalTimeNotifier.value += currentTime;
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('그룹 기록이 저장되었습니다.')),
@@ -363,16 +369,34 @@ class _GroupDetailPageState extends State<GroupDetailPage>
     if (_user == null) return;
 
     try {
-      await FirebaseFirestore.instance
+      // 삭제할 문서의 시간 정보 가져오기
+      final docSnapshot = await FirebaseFirestore.instance
           .collection('groups')
           .doc(widget.groupId)
           .collection('records')
           .doc(docId)
-          .delete();
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('데이터가 삭제되었습니다.')),
-      );
+          .get();
+      
+      if (docSnapshot.exists) {
+        final data = docSnapshot.data();
+        final int timeToSubtract = (data?['time'] ?? 0).round();
+        
+        // 문서 삭제
+        await FirebaseFirestore.instance
+            .collection('groups')
+            .doc(widget.groupId)
+            .collection('records')
+            .doc(docId)
+            .delete();
+        
+        // 총 시간에서 삭제한 시간 빼기
+        final int newTotal = _totalTimeNotifier.value - timeToSubtract;
+        _totalTimeNotifier.value = newTotal;
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('데이터가 삭제되었습니다.')),
+        );
+      }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('데이터 삭제에 실패했습니다: $e')),
@@ -544,16 +568,17 @@ class _GroupDetailPageState extends State<GroupDetailPage>
   void dispose() {
     _timer?.cancel();
     _elapsedSecondsNotifier.dispose();
+    _totalTimeNotifier.dispose();
     _keyboardFocusNode.dispose();
     _referenceFocusNode.removeListener(_checkFocusState);
     _referenceFocusNode.dispose();
     _meetingDataFocusNode.removeListener(_checkFocusState);
     _meetingDataFocusNode.dispose();
     _focusSubscription.cancel();
-
+    
     // 위젯 바인딩 옵저버 제거
     WidgetsBinding.instance.removeObserver(this);
-
+    
     super.dispose();
   }
 
@@ -774,6 +799,24 @@ class _GroupDetailPageState extends State<GroupDetailPage>
                     padding: EdgeInsets.symmetric(horizontal: 16),
                     child: Column(
                       children: [
+                        Align(
+                          alignment: AlignmentDirectional.centerEnd,
+                          child: ValueListenableBuilder(
+                            valueListenable: _totalTimeNotifier,
+                            builder: (context, value, child) {
+                              return Padding(
+                                padding: const EdgeInsets.only(right: 16.0, top: 8.0),
+                                child: Text(
+                                  "총 기록 시간 : ${_formatTime(value)}",
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
                         Expanded(
                           child: Container(
                             color: Colors.white,
@@ -1318,5 +1361,43 @@ class _GroupDetailPageState extends State<GroupDetailPage>
             }
           : null,
     );
+  }
+
+  // 총 기록 시간을 로드하는 함수
+  Future<void> _loadTotalTime() async {
+    if (_user == null) return;
+    
+    try {
+      final querySnapshot = await FirebaseFirestore.instance
+          .collection('groups')
+          .doc(widget.groupId)
+          .collection('records')
+          .get();
+      
+      int totalSeconds = 0;
+      for (var doc in querySnapshot.docs) {
+        Map<String, dynamic> data = doc.data();
+        // 명시적으로 정수로 변환
+        final int seconds = (data['time'] ?? 0).round();
+        totalSeconds += seconds;
+      }
+      
+      _totalTimeNotifier.value = totalSeconds;
+    } catch (e) {
+      print('총 기록 시간 로드 중 오류 발생: $e');
+    }
+  }
+
+  // 시간 포맷 함수
+  String _formatTime(int seconds) {
+    final hours = seconds ~/ 3600;
+    final minutes = (seconds % 3600) ~/ 60;
+    final remainingSeconds = seconds % 60;
+    
+    if (hours > 0) {
+      return '$hours:${minutes.toString().padLeft(2, '0')}:${remainingSeconds.toString().padLeft(2, '0')}';
+    } else {
+      return '${minutes.toString().padLeft(2, '0')}:${remainingSeconds.toString().padLeft(2, '0')}';
+    }
   }
 }
