@@ -149,21 +149,11 @@ class _GroupDetailPageState extends State<GroupDetailPage>
         _isExpanded = true;  // 기본값은 확장된 상태
       });
       
-      // 현재 창 크기 가져오기 (기본값 사용)
-      Size currentSize = Size(800, 600);
+      // 현재 창 크기 가져오기
+      Size currentSize = await windowManager.getSize();
       
-      WindowOptions windowOptions = WindowOptions(
-        size: _isExpanded ? Size(currentSize.width, 600) : Size(currentSize.width, 50),
-        center: true,
-        backgroundColor: Colors.transparent,
-        skipTaskbar: false,
-      );
-      
-      await windowManager.waitUntilReadyToShow(windowOptions, () async {
-        await windowManager.show();
-        await windowManager.focus();
-        await windowManager.setAlwaysOnTop(savedPinState);
-      });
+      // 창 크기 변경 없이 항상 위에 표시 상태만 변경
+      await windowManager.setAlwaysOnTop(savedPinState);
     } catch (e) {
       print('창 초기화 중 오류 발생: $e');
     }
