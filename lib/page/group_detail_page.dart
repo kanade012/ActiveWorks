@@ -164,6 +164,7 @@ class _GroupDetailPageState extends State<GroupDetailPage>
     super.initState();
     _initializeWindow();  // 창 초기화 함수 호출
     _loadTotalTime();  // 총 기록 시간 로드
+    _recordGroupAccess();  // 그룹 접속 시간 기록
     
     // 위젯 바인딩 옵저버 등록
     WidgetsBinding.instance.addObserver(this);
@@ -807,6 +808,116 @@ class _GroupDetailPageState extends State<GroupDetailPage>
                             },
                           ),
                         ),
+                        Container(
+                          width: double.infinity,
+                          height: 100,
+                          margin: EdgeInsets.only(bottom: 10),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(10),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.grey.withOpacity(0.3),
+                                spreadRadius: 1,
+                                blurRadius: 3,
+                                offset: Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Padding(
+                                padding: EdgeInsets.only(left: 16, top: 8, bottom: 4),
+                                child: Text(
+                                  "멤버의 첫 접속 시간",
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              ),
+                              Expanded(
+                                child: StreamBuilder<DocumentSnapshot>(
+                                  stream: FirebaseFirestore.instance
+                                      .collection('groups')
+                                      .doc(widget.groupId)
+                                      .snapshots(),
+                                  builder: (context, snapshot) {
+                                    if (!snapshot.hasData || snapshot.data == null) {
+                                      return Center(child: Text('로딩 중...'));
+                                    }
+                                    
+                                    final groupData = snapshot.data!.data() as Map<String, dynamic>?;
+                                    if (groupData == null) {
+                                      return Center(child: Text('그룹 정보를 불러올 수 없습니다.'));
+                                    }
+                                    
+                                    final List<dynamic> memberIds = List.from(groupData['members'] ?? []);
+                                    if (memberIds.isEmpty) {
+                                      return Center(child: Text('멤버가 없습니다.'));
+                                    }
+                                    
+                                    return FutureBuilder<Map<String, dynamic>>(
+                                      future: _getMembersFirstAccessTime(memberIds),
+                                      builder: (context, accessTimeSnapshot) {
+                                        if (!accessTimeSnapshot.hasData) {
+                                          return Center(child: CircularProgressIndicator());
+                                        }
+                                        
+                                        final membersData = accessTimeSnapshot.data!;
+                                        if (membersData.isEmpty) {
+                                          return Center(child: Text('접속 시간 정보가 없습니다.'));
+                                        }
+                                        
+                                        return ListView.builder(
+                                          scrollDirection: Axis.horizontal,
+                                          itemCount: membersData.length,
+                                          itemBuilder: (context, index) {
+                                            final email = membersData.keys.elementAt(index);
+                                            final accessTime = membersData[email];
+                                            
+                                            return Container(
+                                              margin: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                              padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                              decoration: BoxDecoration(
+                                                color: Colors.grey.shade100,
+                                                borderRadius: BorderRadius.circular(8),
+                                              ),
+                                              child: Column(
+                                                mainAxisAlignment: MainAxisAlignment.center,
+                                                crossAxisAlignment: CrossAxisAlignment.start,
+                                                children: [
+                                                  Text(
+                                                    email,
+                                                    style: TextStyle(
+                                                      fontWeight: FontWeight.bold,
+                                                      fontSize: 12,
+                                                    ),
+                                                  ),
+                                                  SizedBox(height: 2),
+                                                  Text(
+                                                    accessTime == null 
+                                                        ? '접속 기록 없음' 
+                                                        : _formatDateTime(accessTime),
+                                                    style: TextStyle(
+                                                      fontSize: 11,
+                                                      color: Colors.grey.shade700,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            );
+                                          },
+                                        );
+                                      },
+                                    );
+                                  },
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                         Expanded(
                           child: Container(
                             color: Colors.white,
@@ -1389,5 +1500,137 @@ class _GroupDetailPageState extends State<GroupDetailPage>
     } else {
       return '${minutes.toString().padLeft(2, '0')}:${remainingSeconds.toString().padLeft(2, '0')}';
     }
+  }
+
+  // 그룹 접속 시간 기록 함수
+  Future<void> _recordGroupAccess() async {
+    if (_user == null) return;
+    
+    try {
+      // 그룹 접속 기록 저장
+      await FirebaseFirestore.instance
+          .collection('groups')
+          .doc(widget.groupId)
+          .collection('access_logs')
+          .add({
+        'userId': _user!.uid,
+        'userEmail': _user!.email,
+        'timestamp': FieldValue.serverTimestamp(),
+      });
+      
+      print('그룹 접속 시간 기록 완료');
+    } catch (e) {
+      print('그룹 접속 시간 기록 오류: $e');
+    }
+  }
+
+  Future<Map<String, dynamic>> _getMembersFirstAccessTime(List<dynamic> memberIds) async {
+    Map<String, dynamic> membersData = {};
+    
+    // 현재 시간과 오전 9시 기준 시간 계산
+    final now = DateTime.now();
+    final today9am = DateTime(now.year, now.month, now.day, 9, 0);
+    final yesterday9am = today9am.subtract(Duration(days: 1));
+    
+    // 현재 시각이 오전 9시 이후인지 확인
+    final isAfter9am = now.hour >= 9;
+    
+    // 기준 시간 설정
+    final startTime = isAfter9am ? today9am : yesterday9am;
+    
+    // 각 멤버의 사용자 정보 가져오기
+    for (var id in memberIds) {
+      try {
+        // 먼저 사용자 정보 가져오기
+        final userDoc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(id)
+            .get();
+        
+        if (userDoc.exists) {
+          final userData = userDoc.data();
+          final String email = userData?['email'] ?? '사용자 정보 없음';
+          
+          // 접속 로그에서 해당 사용자의 기록 찾기
+          final accessLogsSnapshot = await FirebaseFirestore.instance
+              .collection('groups')
+              .doc(widget.groupId)
+              .collection('access_logs')
+              .where('userId', isEqualTo: id)
+              .where('timestamp', isGreaterThanOrEqualTo: Timestamp.fromDate(startTime))
+              .where('timestamp', isLessThanOrEqualTo: Timestamp.fromDate(now))
+              .get();
+          
+          if (accessLogsSnapshot.docs.isNotEmpty) {
+            // 클라이언트 측에서 정렬하여 첫 번째 항목 가져오기
+            final sortedDocs = accessLogsSnapshot.docs
+                .map((doc) => doc.data())
+                .toList()
+                ..sort((a, b) {
+                  final aTimestamp = a['timestamp'] as Timestamp?;
+                  final bTimestamp = b['timestamp'] as Timestamp?;
+                  if (aTimestamp == null) return 1;
+                  if (bTimestamp == null) return -1;
+                  return aTimestamp.compareTo(bTimestamp); // 오름차순 정렬
+                });
+            
+            if (sortedDocs.isNotEmpty && sortedDocs.first['timestamp'] != null) {
+              membersData[email] = sortedDocs.first['timestamp'].toDate();
+            } else {
+              membersData[email] = null;
+            }
+          } else {
+            // 이전 방식으로 시도 - 레코드에서 찾기
+            final recordsSnapshot = await FirebaseFirestore.instance
+                .collection('groups')
+                .doc(widget.groupId)
+                .collection('records')
+                .where('userId', isEqualTo: id)
+                .where('timestamp', isGreaterThanOrEqualTo: Timestamp.fromDate(startTime))
+                .where('timestamp', isLessThanOrEqualTo: Timestamp.fromDate(now))
+                .get();
+            
+            if (recordsSnapshot.docs.isNotEmpty) {
+              final sortedDocs = recordsSnapshot.docs
+                  .map((doc) => doc.data())
+                  .toList()
+                  ..sort((a, b) {
+                    final aTimestamp = a['timestamp'] as Timestamp?;
+                    final bTimestamp = b['timestamp'] as Timestamp?;
+                    if (aTimestamp == null) return 1;
+                    if (bTimestamp == null) return -1;
+                    return aTimestamp.compareTo(bTimestamp);
+                  });
+              
+              if (sortedDocs.isNotEmpty && sortedDocs.first['timestamp'] != null) {
+                membersData[email] = sortedDocs.first['timestamp'].toDate();
+              } else {
+                membersData[email] = null;
+              }
+            } else {
+              membersData[email] = null;
+            }
+          }
+        }
+      } catch (e) {
+        print('멤버 정보 가져오기 오류: $e');
+      }
+    }
+    
+    // 현재 사용자의 현재 접속을 데이터에 추가
+    if (_user != null && _user!.email != null) {
+      if (!membersData.containsKey(_user!.email)) {
+        membersData[_user!.email!] = DateTime.now();
+      }
+    }
+    
+    return membersData;
+  }
+
+  String _formatDateTime(DateTime dateTime) {
+    // 시간과 분을 두 자리 숫자로 포맷팅
+    final hour = dateTime.hour.toString().padLeft(2, '0');
+    final minute = dateTime.minute.toString().padLeft(2, '0');
+    return '${hour}시:${minute}분';
   }
 }
