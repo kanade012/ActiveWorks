@@ -46,6 +46,10 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
   // 회고 관련 변수
   final TextEditingController _reflectionController = TextEditingController();
   String _todayDate = DateFormat('yyyy-MM-dd').format(DateTime.now());
+  int _reflectionRating = 0; // 회고 별점 (1~5)
+  
+  // 회고 필터 관련 변수
+  String _currentReflectionFilter = 'all'; // 'all', 'last7', 'last30'
   
   // 회고 표시 여부
   bool _showReflectionPanel = false;
@@ -737,7 +741,12 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
       if (reflectionDoc.exists && reflectionDoc.data() != null) {
         final data = reflectionDoc.data()!;
         final String reflection = data['reflection'] ?? '';
-        _reflectionController.text = reflection;
+        final int rating = data['rating'] ?? 0;
+        
+        setState(() {
+          _reflectionController.text = reflection;
+          _reflectionRating = rating;
+        });
       }
     } catch (e) {
       print('회고 로드 중 오류 발생: $e');
@@ -757,6 +766,7 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
           .set({
         'reflection': reflection,
         'date': _todayDate,
+        'rating': _reflectionRating, // 별점 저장
         'updatedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
       
@@ -807,66 +817,247 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
     if (_user == null) return;
     
     try {
-      final reflectionsSnapshot = await FirebaseFirestore.instance
+      // 필터 초기화
+      setState(() {
+        _currentReflectionFilter = 'all';
+      });
+      
+      await _showFilteredReflections();
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('회고 기록을 불러오는 중 오류가 발생했습니다: $e')),
+      );
+    }
+  }
+  // 회고 복사 기능 구현
+  void _copyReflections(List<DocumentSnapshot> docs) {
+    if (docs.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('복사할 회고가 없습니다.')),
+      );
+      return;
+    }
+
+    // 복사할 텍스트 구성
+    StringBuffer buffer = StringBuffer();
+    buffer.writeln('===== 회고 =====');
+    buffer.writeln('복사 시각: ${DateFormat('yyyy-MM-dd HH:mm').format(DateTime.now())}');
+    buffer.writeln('총 ${docs.length}개의 회고');
+    buffer.writeln('==============================\n');
+
+    // 회고 데이터 정렬 (날짜 내림차순)
+    docs.sort((a, b) {
+      final aData = a.data() as Map<String, dynamic>;
+      final bData = b.data() as Map<String, dynamic>;
+      final aDate = aData['date'] as String? ?? '';
+      final bDate = bData['date'] as String? ?? '';
+      return bDate.compareTo(aDate); // 최신 날짜가 위로
+    });
+
+    // 날짜별로 그룹화
+    Map<String, List<DocumentSnapshot>> groupedByDate = {};
+    for (var doc in docs) {
+      final data = doc.data() as Map<String, dynamic>;
+      final date = data['date'] as String? ?? '날짜 없음';
+      if (!groupedByDate.containsKey(date)) {
+        groupedByDate[date] = [];
+      }
+      groupedByDate[date]!.add(doc);
+    }
+
+    // 날짜별로 정렬된 키 목록 생성
+    List<String> sortedDates = groupedByDate.keys.toList()
+      ..sort((a, b) => b.compareTo(a)); // 최신 날짜가 위로
+
+    // 날짜별로 회고 추가
+    for (var date in sortedDates) {
+      buffer.writeln('\n[${date}]');
+
+      for (var doc in groupedByDate[date]!) {
+        final data = doc.data() as Map<String, dynamic>;
+        final reflection = data['reflection'] as String? ?? '';
+        final rating = data['rating'] as int? ?? 0;
+
+        // 별점을 별 문자로 표시
+        String stars = '';
+        for (int i = 0; i < 5; i++) {
+          stars += i < rating ? '★' : '☆';
+        }
+
+        buffer.writeln('\n- 별점: $stars ($rating/5)');
+        buffer.writeln('- 내용: $reflection');
+        buffer.writeln('------------------------------');
+      }
+    }
+
+    // 클립보드에 복사
+    Clipboard.setData(ClipboardData(text: buffer.toString())).then((_) {
+      // 복사 완료 메시지
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${docs.length}개의 회고가 클립보드에 복사되었습니다.')),
+      );
+    });
+  }
+  // 필터링된 회고 표시 함수
+  Future<void> _showFilteredReflections() async {
+    if (_user == null) return;
+    
+    try {
+      // 기본 쿼리 설정
+      Query query = FirebaseFirestore.instance
           .collection('users')
           .doc(_user!.uid)
           .collection('reflections')
-          .orderBy('date', descending: true)
-          .limit(30)  // 최근 30일 회고
-          .get();
+          .orderBy('date', descending: true);
+      
+      // 날짜 필터 적용
+      final now = DateTime.now();
+      if (_currentReflectionFilter == 'last7') {
+        final sevenDaysAgo = now.subtract(Duration(days: 7));
+        final sevenDaysAgoStr = DateFormat('yyyy-MM-dd').format(sevenDaysAgo);
+        query = query.where('date', isGreaterThanOrEqualTo: sevenDaysAgoStr);
+      } else if (_currentReflectionFilter == 'last30') {
+        final thirtyDaysAgo = now.subtract(Duration(days: 30));
+        final thirtyDaysAgoStr = DateFormat('yyyy-MM-dd').format(thirtyDaysAgo);
+        query = query.where('date', isGreaterThanOrEqualTo: thirtyDaysAgoStr);
+      }
+      
+      // 데이터 가져오기
+      final reflectionsSnapshot = await query.limit(30).get();
       
       if (reflectionsSnapshot.docs.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('저장된 회고가 없습니다.')),
+          SnackBar(content: Text('선택한 필터에 해당하는 회고가 없습니다.')),
         );
         return;
       }
       
+      // 별점 평균 계산
+      double totalRating = 0;
+      int ratingCount = 0;
+      
+      for (var doc in reflectionsSnapshot.docs) {
+        final data = doc.data() as Map<String, dynamic>;
+        final rating = data['rating'] ?? 0;
+        if (rating > 0) {
+          totalRating += rating;
+          ratingCount++;
+        }
+      }
+      
+      final avgRating = ratingCount > 0 ? totalRating / ratingCount : 0;
+      
+      // 다이얼로그 표시
       showDialog(
         context: context,
         builder: (context) {
-          return AlertDialog(
-            title: Text('지난 회고'),
-            content: Container(
-              width: double.maxFinite,
-              height: 400,
-              child: ListView.builder(
-                itemCount: reflectionsSnapshot.docs.length,
-                itemBuilder: (context, index) {
-                  final doc = reflectionsSnapshot.docs[index];
-                  final data = doc.data();
-                  final date = data['date'] ?? '날짜 없음';
-                  final reflection = data['reflection'] ?? '';
-                  
-                  return Card(
-                    margin: EdgeInsets.symmetric(vertical: 8.0),
-                    child: Padding(
-                      padding: EdgeInsets.all(12.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            date,
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16,
+          return StatefulBuilder(
+            builder: (context, setState) {
+              return AlertDialog(
+                title: Text('지난 회고'),
+                content: Container(
+                  width: double.maxFinite,
+                  height: 500,
+                  child: Column(
+                    children: [
+                      // 필터 옵션
+                      Container(
+                        padding: EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade100,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('필터:', style: TextStyle(fontWeight: FontWeight.bold)),
+                            Row(
+                              children: [
+                                _buildFilterChip('전체', 'all', setState),
+                                SizedBox(width: 4),
+                                _buildFilterChip('최근 7일', 'last7', setState),
+                                SizedBox(width: 4),
+                                _buildFilterChip('최근 30일', 'last30', setState),
+                                SizedBox(width: 4),
+                                TextButton.icon(
+                                  icon: Icon(Icons.copy, size: 18),
+                                  label: Text('복사'),
+                                  onPressed: () {
+                                    _copyReflections(reflectionsSnapshot.docs);
+                                  },
+                                ),
+                              ],
                             ),
-                          ),
-                          Divider(),
-                          Text(reflection),
-                        ],
+                            
+                            // 평균 별점 표시
+                            Padding(
+                              padding: const EdgeInsets.only(top: 8.0),
+                              child: Row(
+                                children: [
+                                  Text('평균 별점: ', style: TextStyle(fontWeight: FontWeight.bold)),
+                                  Text('${avgRating.toStringAsFixed(1)}'),
+                                  SizedBox(width: 8),
+                                  _buildRatingBar(avgRating.toDouble(), true),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                  );
-                },
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: Text('닫기'),
-              ),
-            ],
+                      
+                      SizedBox(height: 8),
+                      
+                      // 회고 목록
+                      Expanded(
+                        child: ListView.builder(
+                          itemCount: reflectionsSnapshot.docs.length,
+                          itemBuilder: (context, index) {
+                            final doc = reflectionsSnapshot.docs[index];
+                            final data = doc.data() as Map<String, dynamic>;
+                            final date = data['date'] ?? '날짜 없음';
+                            final reflection = data['reflection'] ?? '';
+                            final rating = data['rating'] ?? 0;
+                            
+                            return Card(
+                              margin: EdgeInsets.symmetric(vertical: 8.0),
+                              child: Padding(
+                                padding: EdgeInsets.all(12.0),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Text(
+                                          date,
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 16,
+                                          ),
+                                        ),
+                                        _buildRatingBar(rating.toDouble(), true),
+                                      ],
+                                    ),
+                                    Divider(),
+                                    Text(reflection),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: Text('닫기'),
+                  ),
+                ],
+              );
+            },
           );
         },
       );
@@ -875,6 +1066,56 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
         SnackBar(content: Text('회고 기록을 불러오는 중 오류가 발생했습니다: $e')),
       );
     }
+  }
+  
+  // 필터 칩 위젯 생성 함수
+  Widget _buildFilterChip(String label, String value, StateSetter setState) {
+    return ChoiceChip(
+      label: Text(label),
+      selected: _currentReflectionFilter == value,
+      onSelected: (selected) {
+        if (selected) {
+          setState(() {
+            _currentReflectionFilter = value;
+          });
+          // 필터 변경 시 데이터 다시 로드
+          _showFilteredReflections();
+          Navigator.pop(context);
+        }
+      },
+    );
+  }
+  
+  // 별점 표시 위젯 생성 함수
+  Widget _buildRatingBar(double rating, bool readOnly) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: List.generate(5, (index) {
+        return IconButton(
+          icon: Icon(
+            index < rating.round() ? Icons.star : Icons.star_border,
+            color: Colors.amber,
+            size: readOnly ? 16 : 24,
+          ),
+          padding: EdgeInsets.zero,
+          constraints: BoxConstraints(),
+          onPressed: readOnly ? null : () {
+            setState(() {
+              _reflectionRating = index + 1;
+            });
+          },
+        );
+      }),
+    );
+  }
+  
+  // 진행률에 따른 색상 반환
+  Color _getProgressColor(double percentage) {
+    if (percentage >= 100) return Colors.green;
+    if (percentage >= 75) return Colors.lightGreen;
+    if (percentage >= 50) return Colors.amber;
+    if (percentage >= 25) return Colors.orange;
+    return Colors.red;
   }
   
   // 과거 목표 및 달성률 기록 보기
@@ -998,15 +1239,6 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
     }
   }
   
-  // 진행률에 따른 색상 반환
-  Color _getProgressColor(double percentage) {
-    if (percentage >= 100) return Colors.green;
-    if (percentage >= 75) return Colors.lightGreen;
-    if (percentage >= 50) return Colors.amber;
-    if (percentage >= 25) return Colors.orange;
-    return Colors.red;
-  }
-  
   // 목표 시간 설정 다이얼로그 표시
   void _showGoalSettingDialog() {
     _goalMinutesController.text = _dailyGoalMinutesNotifier.value.toString();
@@ -1086,8 +1318,6 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
                   shadowColor: Colors.transparent,
                   // 그림자 색상 투명하게
                   elevation: 0,
-                  // 앱바 높이 효과 제거
-                  forceMaterialTransparency: false,
                   // 머티리얼 효과 제거
 
                   actions: [
@@ -1338,6 +1568,18 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
                                     ),
                                   ],
                                 ),
+                                
+                                // 별점 입력 UI 추가
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(vertical: 8.0),
+                                  child: Row(
+                                    children: [
+                                      Text('별점: ', style: TextStyle(fontWeight: FontWeight.bold)),
+                                      _buildRatingBar(_reflectionRating.toDouble(), false),
+                                    ],
+                                  ),
+                                ),
+                                
                                 SizedBox(height: 8),
                                 Container(
                                   height: 100,
