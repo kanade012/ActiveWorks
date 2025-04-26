@@ -7,6 +7,7 @@ import 'package:planner/page/join_group_page.dart';
 import 'package:planner/page/group_list_page.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:intl/intl.dart';
 import '../services/auth_service.dart';
 import '../models/user_model.dart';
 import 'group_detail_page.dart';
@@ -37,10 +38,24 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
   final ValueNotifier<int> _elapsedSecondsNotifier = ValueNotifier<int>(0);
   final ValueNotifier<int> _totalTimeNotifier = ValueNotifier<int>(0);
 
+  // 목표 시간 관련 변수
+  final ValueNotifier<int> _dailyGoalMinutesNotifier = ValueNotifier<int>(0);
+  final ValueNotifier<int> _todayTotalTimeNotifier = ValueNotifier<int>(0);
+  final TextEditingController _goalMinutesController = TextEditingController();
+  
+  // 회고 관련 변수
+  final TextEditingController _reflectionController = TextEditingController();
+  String _todayDate = DateFormat('yyyy-MM-dd').format(DateTime.now());
+  
+  // 회고 표시 여부
+  bool _showReflectionPanel = false;
+  
   // 키보드 포커스 노드 추가
   final FocusNode _keyboardFocusNode = FocusNode();
   final FocusNode _referenceFocusNode = FocusNode();
   final FocusNode _meetingDataFocusNode = FocusNode();
+  final FocusNode _reflectionFocusNode = FocusNode();
+  final FocusNode _goalMinutesFocusNode = FocusNode();
 
   // 전역 포커스 변경 감지 구독
   late final StreamSubscription<bool> _focusSubscription;
@@ -172,6 +187,9 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
     _initializeWindow(); // 창 초기화 함수 호출
     _loadAlwaysOnTopState(); // 저장된 화면 고정 상태 불러오기
     _loadTotalTime(); // 총 기록 시간 로드
+    _loadTodayTime(); // 오늘의 기록 시간 로드
+    _loadDailyGoal(); // 목표 시간 로드
+    _loadTodayReflection(); // 오늘의 회고 로드
     
     // 로그인된 사용자가 있는 경우 첫 번째 그룹 자동 열기
     _checkAndOpenFirstGroup();
@@ -252,6 +270,7 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
     try {
       final now = DateTime.now();
       final currentTime = _elapsedSecondsNotifier.value;
+      final String today = DateFormat('yyyy-MM-dd').format(now);
 
       await FirebaseFirestore.instance
           .collection('users')
@@ -262,14 +281,18 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
         'meetingData': _meetingData,
         'time': currentTime,
         'timestamp': FieldValue.serverTimestamp(),
-        'date':
-        '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}',
+        'date': today,
         'timeOfDay':
         '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}',
       });
 
       // 총 시간 업데이트
       _totalTimeNotifier.value += currentTime;
+      
+      // 오늘의 기록 시간 업데이트
+      if (today == _todayDate) {
+        _todayTotalTimeNotifier.value += currentTime;
+      }
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('데이터가 저장되었습니다.')),
@@ -319,8 +342,9 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
           .get();
 
       if (docSnapshot.exists) {
-        final data = docSnapshot.data();
-        final int timeToSubtract = (data?['time'] ?? 0).round();
+        final data = docSnapshot.data() as Map<String, dynamic>;
+        final int timeToSubtract = (data['time'] ?? 0).round();
+        final String recordDate = data['date'] ?? '';
 
         // 문서 삭제
         await FirebaseFirestore.instance
@@ -333,6 +357,12 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
         // 총 시간에서 삭제한 시간 빼기
         final int newTotal = _totalTimeNotifier.value - timeToSubtract;
         _totalTimeNotifier.value = newTotal;
+        
+        // 삭제한 기록이 오늘 날짜인 경우 오늘의 기록 시간도 감소
+        if (recordDate == _todayDate) {
+          final int newTodayTotal = _todayTotalTimeNotifier.value - timeToSubtract;
+          _todayTotalTimeNotifier.value = newTodayTotal;
+        }
 
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('데이터가 삭제되었습니다.')),
@@ -438,6 +468,8 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
     // 직접 포커스 이벤트 감시
     _referenceFocusNode.addListener(_checkFocusState);
     _meetingDataFocusNode.addListener(_checkFocusState);
+    _reflectionFocusNode.addListener(_checkFocusState);
+    _goalMinutesFocusNode.addListener(_checkFocusState);
 
     // 글로벌 포커스 변경 감시 스트림 생성
     final focusController = StreamController<bool>.broadcast();
@@ -464,7 +496,8 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
     if (!mounted) return;
 
     final hasFocus =
-        _referenceFocusNode.hasFocus || _meetingDataFocusNode.hasFocus;
+        _referenceFocusNode.hasFocus || _meetingDataFocusNode.hasFocus ||
+        _reflectionFocusNode.hasFocus || _goalMinutesFocusNode.hasFocus;
     if (hasFocus != _isTextFieldFocused) {
       setState(() {
         _isTextFieldFocused = hasFocus;
@@ -481,6 +514,10 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
     _referenceFocusNode.dispose();
     _meetingDataFocusNode.removeListener(_checkFocusState);
     _meetingDataFocusNode.dispose();
+    _reflectionFocusNode.removeListener(_checkFocusState);
+    _reflectionFocusNode.dispose();
+    _goalMinutesFocusNode.removeListener(_checkFocusState);
+    _goalMinutesFocusNode.dispose();
     _focusSubscription.cancel();
 
     // 위젯 바인딩 옵저버 제거
@@ -532,7 +569,9 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
     // 텍스트 필드에 포커스가 없을 때만 스페이스바 감지
     if (!_isTextFieldFocused &&
         !_referenceFocusNode.hasFocus &&
-        !_meetingDataFocusNode.hasFocus) {
+        !_meetingDataFocusNode.hasFocus &&
+        !_reflectionFocusNode.hasFocus &&
+        !_goalMinutesFocusNode.hasFocus) {
       if (event is RawKeyDownEvent) {
         if (event.logicalKey == LogicalKeyboardKey.space) {
           // 스페이스바가 눌렸을 때 타이머 상태 토글
@@ -631,6 +670,381 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
       print('첫 번째 그룹 자동 열기 중 오류 발생: $e');
       // 오류가 발생해도 앱은 계속 실행
     }
+  }
+
+  // 오늘의 목표 시간 로드
+  Future<void> _loadDailyGoal() async {
+    if (_user == null) return;
+    
+    try {
+      final goalDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(_user!.uid)
+          .collection('goals')
+          .doc(_todayDate)
+          .get();
+          
+      if (goalDoc.exists && goalDoc.data() != null) {
+        final data = goalDoc.data()!;
+        final int minutes = data['goalMinutes'] ?? 0;
+        _dailyGoalMinutesNotifier.value = minutes;
+        _goalMinutesController.text = minutes.toString();
+      }
+    } catch (e) {
+      print('목표 시간 로드 중 오류 발생: $e');
+    }
+  }
+  
+  // 오늘 목표 시간 저장
+  Future<void> _saveDailyGoal(int minutes) async {
+    if (_user == null) return;
+    
+    try {
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(_user!.uid)
+          .collection('goals')
+          .doc(_todayDate)
+          .set({
+        'goalMinutes': minutes,
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+      
+      _dailyGoalMinutesNotifier.value = minutes;
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('오늘의 목표 시간이 설정되었습니다.')),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('목표 시간 저장 중 오류가 발생했습니다: $e')),
+      );
+    }
+  }
+  
+  // 오늘의 회고 로드
+  Future<void> _loadTodayReflection() async {
+    if (_user == null) return;
+    
+    try {
+      final reflectionDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(_user!.uid)
+          .collection('reflections')
+          .doc(_todayDate)
+          .get();
+          
+      if (reflectionDoc.exists && reflectionDoc.data() != null) {
+        final data = reflectionDoc.data()!;
+        final String reflection = data['reflection'] ?? '';
+        _reflectionController.text = reflection;
+      }
+    } catch (e) {
+      print('회고 로드 중 오류 발생: $e');
+    }
+  }
+  
+  // 오늘의 회고 저장
+  Future<void> _saveTodayReflection(String reflection) async {
+    if (_user == null) return;
+    
+    try {
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(_user!.uid)
+          .collection('reflections')
+          .doc(_todayDate)
+          .set({
+        'reflection': reflection,
+        'date': _todayDate,
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('오늘의 회고가 저장되었습니다.')),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('회고 저장 중 오류가 발생했습니다: $e')),
+      );
+    }
+  }
+  
+  // 오늘 기록된 시간 로드
+  Future<void> _loadTodayTime() async {
+    if (_user == null) return;
+    
+    try {
+      final querySnapshot = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(_user!.uid)
+          .collection('records')
+          .where('date', isEqualTo: _todayDate)
+          .get();
+          
+      int totalSeconds = 0;
+      for (var doc in querySnapshot.docs) {
+        Map<String, dynamic> data = doc.data();
+        final int seconds = (data['time'] ?? 0).round();
+        totalSeconds += seconds;
+      }
+      
+      _todayTotalTimeNotifier.value = totalSeconds;
+    } catch (e) {
+      print('오늘 기록 시간 로드 중 오류 발생: $e');
+    }
+  }
+  
+  // 회고 패널 토글 함수
+  void _toggleReflectionPanel() {
+    setState(() {
+      _showReflectionPanel = !_showReflectionPanel;
+    });
+  }
+  
+  // 과거 회고 보기
+  Future<void> _showPastReflections() async {
+    if (_user == null) return;
+    
+    try {
+      final reflectionsSnapshot = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(_user!.uid)
+          .collection('reflections')
+          .orderBy('date', descending: true)
+          .limit(30)  // 최근 30일 회고
+          .get();
+      
+      if (reflectionsSnapshot.docs.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('저장된 회고가 없습니다.')),
+        );
+        return;
+      }
+      
+      showDialog(
+        context: context,
+        builder: (context) {
+          return AlertDialog(
+            title: Text('지난 회고'),
+            content: Container(
+              width: double.maxFinite,
+              height: 400,
+              child: ListView.builder(
+                itemCount: reflectionsSnapshot.docs.length,
+                itemBuilder: (context, index) {
+                  final doc = reflectionsSnapshot.docs[index];
+                  final data = doc.data();
+                  final date = data['date'] ?? '날짜 없음';
+                  final reflection = data['reflection'] ?? '';
+                  
+                  return Card(
+                    margin: EdgeInsets.symmetric(vertical: 8.0),
+                    child: Padding(
+                      padding: EdgeInsets.all(12.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            date,
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                            ),
+                          ),
+                          Divider(),
+                          Text(reflection),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text('닫기'),
+              ),
+            ],
+          );
+        },
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('회고 기록을 불러오는 중 오류가 발생했습니다: $e')),
+      );
+    }
+  }
+  
+  // 과거 목표 및 달성률 기록 보기
+  Future<void> _showPastGoals() async {
+    if (_user == null) return;
+    
+    try {
+      final goalsSnapshot = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(_user!.uid)
+          .collection('goals')
+          .orderBy('updatedAt', descending: true)
+          .limit(30)  // 최근 30일 목표
+          .get();
+      
+      if (goalsSnapshot.docs.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('저장된 목표가 없습니다.')),
+        );
+        return;
+      }
+      
+      // 목표 날짜별로 실제 기록 시간 조회
+      List<Map<String, dynamic>> goalRecords = [];
+      
+      for (var doc in goalsSnapshot.docs) {
+        final data = doc.data();
+        final date = doc.id;
+        final goalMinutes = data['goalMinutes'] ?? 0;
+        
+        // 해당 날짜의 실제 기록 시간 조회
+        final recordsSnapshot = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(_user!.uid)
+            .collection('records')
+            .where('date', isEqualTo: date)
+            .get();
+            
+        int actualSeconds = 0;
+        for (var recordDoc in recordsSnapshot.docs) {
+          final num timeValue = recordDoc.data()['time'] ?? 0;
+          actualSeconds += timeValue.round();
+        }
+        
+        int actualMinutes = actualSeconds ~/ 60;
+        double progressPercentage = goalMinutes > 0 
+            ? (actualMinutes / goalMinutes * 100).clamp(0, 100) 
+            : 0;
+            
+        goalRecords.add({
+          'date': date,
+          'goalMinutes': goalMinutes,
+          'actualMinutes': actualMinutes,
+          'progressPercentage': progressPercentage,
+        });
+      }
+      
+      showDialog(
+        context: context,
+        builder: (context) {
+          return AlertDialog(
+            title: Text('지난 목표 및 달성률'),
+            content: Container(
+              width: double.maxFinite,
+              height: 400,
+              child: ListView.builder(
+                itemCount: goalRecords.length,
+                itemBuilder: (context, index) {
+                  final record = goalRecords[index];
+                  
+                  return Card(
+                    margin: EdgeInsets.symmetric(vertical: 8.0),
+                    child: Padding(
+                      padding: EdgeInsets.all(12.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            record['date'],
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                            ),
+                          ),
+                          SizedBox(height: 8),
+                          Text('목표: ${record['goalMinutes']}분'),
+                          Text('실제: ${record['actualMinutes']}분'),
+                          SizedBox(height: 8),
+                          LinearProgressIndicator(
+                            value: record['progressPercentage'] / 100,
+                            backgroundColor: Colors.grey.shade200,
+                            color: _getProgressColor(record['progressPercentage']),
+                          ),
+                          Text(
+                            '달성률: ${record['progressPercentage'].toStringAsFixed(1)}%',
+                            textAlign: TextAlign.end,
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text('닫기'),
+              ),
+            ],
+          );
+        },
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('목표 기록을 불러오는 중 오류가 발생했습니다: $e')),
+      );
+    }
+  }
+  
+  // 진행률에 따른 색상 반환
+  Color _getProgressColor(double percentage) {
+    if (percentage >= 100) return Colors.green;
+    if (percentage >= 75) return Colors.lightGreen;
+    if (percentage >= 50) return Colors.amber;
+    if (percentage >= 25) return Colors.orange;
+    return Colors.red;
+  }
+  
+  // 목표 시간 설정 다이얼로그 표시
+  void _showGoalSettingDialog() {
+    _goalMinutesController.text = _dailyGoalMinutesNotifier.value.toString();
+    
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text('오늘의 목표 시간 설정'),
+          content: TextField(
+            controller: _goalMinutesController,
+            focusNode: _goalMinutesFocusNode,
+            keyboardType: TextInputType.number,
+            decoration: InputDecoration(
+              labelText: '목표 시간 (분)',
+              hintText: '예: 60 (1시간)',
+            ),
+            inputFormatters: [
+              FilteringTextInputFormatter.digitsOnly,
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text('취소'),
+            ),
+            TextButton(
+              onPressed: () {
+                final minutes = int.tryParse(_goalMinutesController.text) ?? 0;
+                _saveDailyGoal(minutes);
+                Navigator.pop(context);
+              },
+              child: Text('저장'),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   @override
@@ -824,22 +1238,129 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
                       children: [
                         Align(
                           alignment: AlignmentDirectional.centerEnd,
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              IconButton(
+                                icon: Icon(Icons.edit, size: 20),
+                                tooltip: '목표 설정',
+                                onPressed: _showGoalSettingDialog,
+                              ),
+                              IconButton(
+                                icon: Icon(Icons.history, size: 20),
+                                tooltip: '지난 목표 보기',
+                                onPressed: _showPastGoals,
+                              ),
+                              IconButton(
+                                icon: Icon(Icons.note_alt_outlined, size: 20),
+                                tooltip: '회고 토글',
+                                onPressed: _toggleReflectionPanel,
+                              ),
+                            ],
+                          ),
+                        ),
+                        
+                        // 목표 시간 및 진행률 표시
+                        Container(
+                          padding: EdgeInsets.symmetric(vertical: 8, horizontal: 16),
                           child: ValueListenableBuilder(
-                            valueListenable: _totalTimeNotifier,
-                            builder: (context, value, child) {
-                              return Padding(
-                                padding: const EdgeInsets.only(right: 16.0, top: 8.0),
-                                child: Text(
-                                  "총 기록 시간 : ${_formatTime(value)}",
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 14,
-                                  ),
-                                ),
+                            valueListenable: _dailyGoalMinutesNotifier,
+                            builder: (context, goalMinutes, _) {
+                              return ValueListenableBuilder(
+                                valueListenable: _todayTotalTimeNotifier,
+                                builder: (context, todaySeconds, _) {
+                                  final todayMinutes = todaySeconds ~/ 60;
+                                  final progress = goalMinutes > 0 
+                                      ? (todayMinutes / goalMinutes * 100).clamp(0.0, 100.0) 
+                                      : 0.0;
+                                  
+                                  return Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        '오늘의 목표',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 16,
+                                        ),
+                                      ),
+                                      SizedBox(height: 4),
+                                      Text(
+                                        '목표: ${goalMinutes}분 / 현재: ${todayMinutes}분 (${progress.toStringAsFixed(1)}%)',
+                                        style: TextStyle(fontSize: 14),
+                                      ),
+                                      SizedBox(height: 4),
+                                      LinearProgressIndicator(
+                                        value: progress / 100,
+                                        backgroundColor: Colors.grey.shade200,
+                                        color: _getProgressColor(progress),
+                                      ),
+                                    ],
+                                  );
+                                },
                               );
                             },
                           ),
                         ),
+                        
+                        // 회고 패널 (토글 가능)
+                        if (_showReflectionPanel)
+                          Container(
+                            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(
+                                      '오늘의 회고',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 16,
+                                      ),
+                                    ),
+                                    Row(
+                                      children: [
+                                        IconButton(
+                                          icon: Icon(Icons.history, size: 20),
+                                          tooltip: '지난 회고 보기',
+                                          onPressed: _showPastReflections,
+                                        ),
+                                        IconButton(
+                                          icon: Icon(Icons.save, size: 20),
+                                          tooltip: '회고 저장',
+                                          onPressed: () {
+                                            _saveTodayReflection(_reflectionController.text);
+                                          },
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                                SizedBox(height: 8),
+                                Container(
+                                  height: 100,
+                                  padding: EdgeInsets.symmetric(horizontal: 12),
+                                  decoration: BoxDecoration(
+                                    border: Border.all(color: Colors.grey.shade300),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: TextField(
+                                    controller: _reflectionController,
+                                    focusNode: _reflectionFocusNode,
+                                    maxLines: 4,
+                                    decoration: InputDecoration(
+                                      hintText: '오늘의 작업에 대한 회고를 작성하세요...',
+                                      border: InputBorder.none,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          
+                        SizedBox(height: 8),
                         Expanded(
                           child: Container(
                             decoration: BoxDecoration(
@@ -1343,6 +1864,8 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
   void _unfocusTextFields() {
     _referenceFocusNode.unfocus();
     _meetingDataFocusNode.unfocus();
+    _reflectionFocusNode.unfocus();
+    _goalMinutesFocusNode.unfocus();
     FocusScope.of(context).unfocus();
 
     // 명시적 포커스 설정
