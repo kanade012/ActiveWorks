@@ -601,20 +601,25 @@ class _GroupDetailPageState extends State<GroupDetailPage>
     });
   }
 
-  // 키보드 이벤트 처리 함수
+  // 키보드 이벤트 처리
   void _handleKeyEvent(RawKeyEvent event) {
     // 텍스트 필드에 포커스가 없을 때만 스페이스바 감지
-    if (!_isTextFieldFocused &&
-        !_referenceFocusNode.hasFocus &&
-        !_meetingDataFocusNode.hasFocus) {
+    if (!_isTextFieldFocused && !_referenceFocusNode.hasFocus) {
       if (event is RawKeyDownEvent) {
-        if (event.logicalKey == LogicalKeyboardKey.space) {
-          // 스페이스바가 눌렸을 때 타이머 상태 토글
-          if (_isPlaying) {
-            _pauseTimer();
-          } else {
-            _startTimer();
+        try {
+          // 한국어 입력 처리를 위해 물리적 키와 반복 이벤트 검사 추가
+          if (event.logicalKey == LogicalKeyboardKey.space && 
+              !event.repeat && // 반복 이벤트 무시
+              event.character != 'ㅅ') { // 한국어 자음 입력 무시
+            // 스페이스바가 눌렸을 때 타이머 상태 토글
+            if (_isPlaying) {
+              _pauseTimer();
+            } else {
+              _startTimer();
+            }
           }
+        } catch (e) {
+          print('키보드 이벤트 처리 중 오류 발생: $e');
         }
       }
     }

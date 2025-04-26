@@ -2,7 +2,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_core/firebase_core.dart';
 import 'package:planner/page/create_group_page.dart';
 import 'package:planner/page/join_group_page.dart';
 import 'package:planner/page/group_list_page.dart';
@@ -10,6 +9,7 @@ import 'package:window_manager/window_manager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/auth_service.dart';
 import '../models/user_model.dart';
+import 'group_detail_page.dart';
 
 class MainPage extends StatefulWidget {
   const MainPage({Key? key}) : super(key: key);
@@ -168,10 +168,13 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
-    _initializeFirebase();
+    // Firebase는 main.dart에서 이미 초기화되었으므로 여기서는 호출하지 않습니다.
     _initializeWindow(); // 창 초기화 함수 호출
     _loadAlwaysOnTopState(); // 저장된 화면 고정 상태 불러오기
     _loadTotalTime(); // 총 기록 시간 로드
+    
+    // 로그인된 사용자가 있는 경우 첫 번째 그룹 자동 열기
+    _checkAndOpenFirstGroup();
 
     // 위젯 바인딩 옵저버 등록
     WidgetsBinding.instance.addObserver(this);
@@ -183,10 +186,6 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       FocusScope.of(context).requestFocus(_keyboardFocusNode);
     });
-  }
-
-  Future<void> _initializeFirebase() async {
-    await Firebase.initializeApp();
   }
 
   void _startTimer() {
@@ -253,7 +252,7 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
     try {
       final now = DateTime.now();
       final currentTime = _elapsedSecondsNotifier.value;
-      
+
       await FirebaseFirestore.instance
           .collection('users')
           .doc(_user!.uid)
@@ -264,14 +263,14 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
         'time': currentTime,
         'timestamp': FieldValue.serverTimestamp(),
         'date':
-            '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}',
+        '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}',
         'timeOfDay':
-            '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}',
+        '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}',
       });
-      
+
       // 총 시간 업데이트
       _totalTimeNotifier.value += currentTime;
-      
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('데이터가 저장되었습니다.')),
       );
@@ -297,7 +296,7 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
         'reference': reference,
         'meetingData': meetingData,
       });
-      
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('데이터가 수정되었습니다.')),
       );
@@ -318,11 +317,11 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
           .collection('records')
           .doc(docId)
           .get();
-      
+
       if (docSnapshot.exists) {
         final data = docSnapshot.data();
         final int timeToSubtract = (data?['time'] ?? 0).round();
-        
+
         // 문서 삭제
         await FirebaseFirestore.instance
             .collection('users')
@@ -330,11 +329,11 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
             .collection('records')
             .doc(docId)
             .delete();
-        
+
         // 총 시간에서 삭제한 시간 빼기
         final int newTotal = _totalTimeNotifier.value - timeToSubtract;
         _totalTimeNotifier.value = newTotal;
-        
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('데이터가 삭제되었습니다.')),
         );
@@ -350,9 +349,9 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
       BuildContext context, String docId, String reference, String meetingData,
       {String? date, String? timeOfDay}) {
     TextEditingController _referenceController =
-        TextEditingController(text: reference);
+    TextEditingController(text: reference);
     TextEditingController _meetingDataController =
-        TextEditingController(text: meetingData);
+    TextEditingController(text: meetingData);
 
     showDialog(
       context: context,
@@ -501,23 +500,16 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
         .doc(_user!.uid)
         .collection('records');
 
-    // 기본적으로 timestamp로만 정렬하고 나머지는 클라이언트에서 처리
-    switch (_currentSortOption) {
-      case SortOption.latest:
-        return query.orderBy('timestamp', descending: true);
-      case SortOption.oldest:
-        return query.orderBy('timestamp', descending: false);
-      case SortOption.time:
-      case SortOption.date:
-        // 모든 데이터를 가져온 후 클라이언트에서 정렬
-        return query.orderBy('timestamp', descending: true);
-    }
+    // 모든 정렬 옵션을 timestamp로 처리하고 클라이언트에서 추가 정렬
+    return query.orderBy('timestamp', descending: _currentSortOption != SortOption.oldest);
   }
 
   // 정렬 옵션 변경 함수
   void _changeSortOption(SortOption option) {
     setState(() {
       _currentSortOption = option;
+      // 정렬 옵션이 변경되면 화면을 다시 그립니다.
+      // FutureBuilder를 사용하므로 build 메소드가 다시 호출되어 쿼리가 실행됩니다.
     });
   }
 
@@ -557,14 +549,14 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
   // 총 기록 시간을 로드하는 함수
   Future<void> _loadTotalTime() async {
     if (_user == null) return;
-    
+
     try {
       final querySnapshot = await FirebaseFirestore.instance
           .collection('users')
           .doc(_user!.uid)
           .collection('records')
           .get();
-      
+
       int totalSeconds = 0;
       for (var doc in querySnapshot.docs) {
         Map<String, dynamic> data = doc.data();
@@ -572,7 +564,7 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
         final int seconds = (data['time'] ?? 0).round();
         totalSeconds += seconds;
       }
-      
+
       _totalTimeNotifier.value = totalSeconds;
     } catch (e) {
       print('총 기록 시간 로드 중 오류 발생: $e');
@@ -584,11 +576,60 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
     final hours = seconds ~/ 3600;
     final minutes = (seconds % 3600) ~/ 60;
     final remainingSeconds = seconds % 60;
-    
+
     if (hours > 0) {
       return '$hours:${minutes.toString().padLeft(2, '0')}:${remainingSeconds.toString().padLeft(2, '0')}';
     } else {
       return '${minutes.toString().padLeft(2, '0')}:${remainingSeconds.toString().padLeft(2, '0')}';
+    }
+  }
+
+  // 사용자가 로그인한 경우 첫 번째 그룹을 자동으로 열기
+  Future<void> _checkAndOpenFirstGroup() async {
+    // 로그인된 사용자가 있는지 확인
+    if (_user == null) {
+      print('자동 그룹 열기: 로그인된 사용자가 없습니다.');
+      return;
+    }
+    
+    try {
+      print('자동 그룹 열기: 사용자 ${_user!.email}의 그룹 확인 중...');
+      // 사용자의 그룹 목록 가져오기
+      final groupsSnapshot = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(_user!.uid)
+          .collection('groups')
+          .orderBy('joinedAt', descending: true)
+          .limit(1)
+          .get();
+      
+      print('자동 그룹 열기: 그룹 데이터 개수: ${groupsSnapshot.docs.length}');
+      
+      // 그룹이 있는 경우 첫 번째 그룹 열기
+      if (groupsSnapshot.docs.isNotEmpty) {
+        final firstGroup = groupsSnapshot.docs.first;
+        final groupData = firstGroup.data();
+        
+        print('자동 그룹 열기: 첫 번째 그룹 이름: ${groupData['name'] ?? '(이름 없음)'}, ID: ${groupData['groupId']}');
+        
+        // 약간의 지연을 주어 UI가 완전히 로드된 후 이동
+        Future.delayed(Duration(milliseconds: 500), () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => GroupDetailPage(
+                groupId: groupData['groupId'],
+                groupName: groupData['name'] ?? '(이름 없음)',
+              ),
+            ),
+          );
+        });
+      } else {
+        print('자동 그룹 열기: 사용자가 속한 그룹이 없습니다.');
+      }
+    } catch (e) {
+      print('첫 번째 그룹 자동 열기 중 오류 발생: $e');
+      // 오류가 발생해도 앱은 계속 실행
     }
   }
 
@@ -617,156 +658,156 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
           appBar: isSmallScreen
               ? null
               : PreferredSize(
-                  preferredSize: Size.fromHeight(70),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      AppBar(
-                        backgroundColor: Color(0xFFF9FAFC),
-                        // 배경색 검정
-                        title: Text('My workspace'),
-                        // 스크롤 할 때 앱바 색이 변경되지 않도록 설정
-                        scrolledUnderElevation: 0,
-                        // 스크롤 시 높이 효과 제거
-                        shadowColor: Colors.transparent,
-                        // 그림자 색상 투명하게
-                        elevation: 0,
-                        // 앱바 높이 효과 제거
-                        forceMaterialTransparency: false,
-                        // 머티리얼 효과 제거
+            preferredSize: Size.fromHeight(70),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                AppBar(
+                  backgroundColor: Color(0xFFF9FAFC),
+                  // 배경색 검정
+                  title: Text('My workspace'),
+                  // 스크롤 할 때 앱바 색이 변경되지 않도록 설정
+                  scrolledUnderElevation: 0,
+                  // 스크롤 시 높이 효과 제거
+                  shadowColor: Colors.transparent,
+                  // 그림자 색상 투명하게
+                  elevation: 0,
+                  // 앱바 높이 효과 제거
+                  forceMaterialTransparency: false,
+                  // 머티리얼 효과 제거
 
-                        actions: [
-                          // 정렬 버튼을 드롭다운으로 변경
-                          PopupMenuButton<SortOption>(
-                            color: Colors.white,
-                            icon: Row(
-                              children: [
-                                Text(
-                                    '정렬 : ${_getSortOptionText(_currentSortOption)}',
-                                    style: TextStyle(
-                                        fontSize: 14, color: Colors.black)),
-                                Icon(Icons.arrow_drop_down,
-                                    color: Colors.black),
-                              ],
-                            ),
-                            onSelected: (SortOption option) {
-                              _changeSortOption(option);
-                            },
-                            itemBuilder: (BuildContext context) =>
-                                <PopupMenuEntry<SortOption>>[
-                              PopupMenuItem<SortOption>(
-                                value: SortOption.latest,
-                                child: Text('최신순',
-                                    style: TextStyle(color: Colors.black)),
-                              ),
-                              PopupMenuItem<SortOption>(
-                                value: SortOption.oldest,
-                                child: Text('오래된순',
-                                    style: TextStyle(color: Colors.black)),
-                              ),
-                              PopupMenuItem<SortOption>(
-                                value: SortOption.time,
-                                child: Text('기록 시간순',
-                                    style: TextStyle(color: Colors.black)),
-                              ),
-                              PopupMenuItem<SortOption>(
-                                value: SortOption.date,
-                                child: Text('날짜별',
-                                    style: TextStyle(color: Colors.black)),
-                              ),
-                            ],
-                          ),
-                          // 햄버거 메뉴를 PopupMenuButton으로 변경
-                          PopupMenuButton<String>(
-                            color: Colors.white,
-                            icon: Icon(Icons.menu, color: Colors.black),
-                            onSelected: (String value) {
-                              switch (value) {
-                                case 'logout':
-                                  _logout();
-                                  break;
-                                case 'create_group':
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) => CreateGroupPage(),
-                                    ),
-                                  );
-                                  break;
-                                case 'join_group':
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) => JoinGroupPage(),
-                                    ),
-                                  );
-                                  break;
-                                case 'view_groups':
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) => GroupListPage(),
-                                    ),
-                                  );
-                                  break;
-                              }
-                            },
-                            itemBuilder: (BuildContext context) =>
-                                <PopupMenuEntry<String>>[
-                              PopupMenuItem<String>(
-                                value: 'logout',
-                                child: Row(
-                                  children: [
-                                    Icon(Icons.logout, color: Colors.black),
-                                    SizedBox(width: 8),
-                                    Text('로그아웃',
-                                        style: TextStyle(color: Colors.black)),
-                                  ],
-                                ),
-                              ),
-                              PopupMenuItem<String>(
-                                value: 'create_group',
-                                child: Row(
-                                  children: [
-                                    Icon(Icons.group_add, color: Colors.black),
-                                    SizedBox(width: 8),
-                                    Text('그룹생성',
-                                        style: TextStyle(color: Colors.black)),
-                                  ],
-                                ),
-                              ),
-                              PopupMenuItem<String>(
-                                value: 'join_group',
-                                child: Row(
-                                  children: [
-                                    Icon(Icons.person_add, color: Colors.black),
-                                    SizedBox(width: 8),
-                                    Text('그룹참가',
-                                        style: TextStyle(color: Colors.black)),
-                                  ],
-                                ),
-                              ),
-                              PopupMenuItem<String>(
-                                value: 'view_groups',
-                                child: Row(
-                                  children: [
-                                    Icon(Icons.groups, color: Colors.black),
-                                    SizedBox(width: 8),
-                                    Text('그룹보기',
-                                        style: TextStyle(color: Colors.black)),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
+                  actions: [
+                    // 정렬 버튼을 드롭다운으로 변경
+                    PopupMenuButton<SortOption>(
+                      color: Colors.white,
+                      icon: Row(
+                        children: [
+                          Text(
+                              '정렬 : ${_getSortOptionText(_currentSortOption)}',
+                              style: TextStyle(
+                                  fontSize: 14, color: Colors.black)),
+                          Icon(Icons.arrow_drop_down,
+                              color: Colors.black),
                         ],
                       ),
-                    ],
-                  ),
+                      onSelected: (SortOption option) {
+                        _changeSortOption(option);
+                      },
+                      itemBuilder: (BuildContext context) =>
+                      <PopupMenuEntry<SortOption>>[
+                        PopupMenuItem<SortOption>(
+                          value: SortOption.latest,
+                          child: Text('최신순',
+                              style: TextStyle(color: Colors.black)),
+                        ),
+                        PopupMenuItem<SortOption>(
+                          value: SortOption.oldest,
+                          child: Text('오래된순',
+                              style: TextStyle(color: Colors.black)),
+                        ),
+                        PopupMenuItem<SortOption>(
+                          value: SortOption.time,
+                          child: Text('기록 시간순',
+                              style: TextStyle(color: Colors.black)),
+                        ),
+                        PopupMenuItem<SortOption>(
+                          value: SortOption.date,
+                          child: Text('날짜별',
+                              style: TextStyle(color: Colors.black)),
+                        ),
+                      ],
+                    ),
+                    // 햄버거 메뉴를 PopupMenuButton으로 변경
+                    PopupMenuButton<String>(
+                      color: Colors.white,
+                      icon: Icon(Icons.menu, color: Colors.black),
+                      onSelected: (String value) {
+                        switch (value) {
+                          case 'logout':
+                            _logout();
+                            break;
+                          case 'create_group':
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => CreateGroupPage(),
+                              ),
+                            );
+                            break;
+                          case 'join_group':
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => JoinGroupPage(),
+                              ),
+                            );
+                            break;
+                          case 'view_groups':
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => GroupListPage(),
+                              ),
+                            );
+                            break;
+                        }
+                      },
+                      itemBuilder: (BuildContext context) =>
+                      <PopupMenuEntry<String>>[
+                        PopupMenuItem<String>(
+                          value: 'logout',
+                          child: Row(
+                            children: [
+                              Icon(Icons.logout, color: Colors.black),
+                              SizedBox(width: 8),
+                              Text('로그아웃',
+                                  style: TextStyle(color: Colors.black)),
+                            ],
+                          ),
+                        ),
+                        PopupMenuItem<String>(
+                          value: 'create_group',
+                          child: Row(
+                            children: [
+                              Icon(Icons.group_add, color: Colors.black),
+                              SizedBox(width: 8),
+                              Text('그룹생성',
+                                  style: TextStyle(color: Colors.black)),
+                            ],
+                          ),
+                        ),
+                        PopupMenuItem<String>(
+                          value: 'join_group',
+                          child: Row(
+                            children: [
+                              Icon(Icons.person_add, color: Colors.black),
+                              SizedBox(width: 8),
+                              Text('그룹참가',
+                                  style: TextStyle(color: Colors.black)),
+                            ],
+                          ),
+                        ),
+                        PopupMenuItem<String>(
+                          value: 'view_groups',
+                          child: Row(
+                            children: [
+                              Icon(Icons.groups, color: Colors.black),
+                              SizedBox(width: 8),
+                              Text('그룹보기',
+                                  style: TextStyle(color: Colors.black)),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
+              ],
+            ),
+          ),
           // 작은 화면에서는 배경 투명하게 설정
           backgroundColor:
-              isSmallScreen ? Colors.transparent : Color(0xFFF9FAFC),
+          isSmallScreen ? Colors.transparent : Color(0xFFF9FAFC),
           body: GestureDetector(
             // 빈 공간 탭 시 텍스트 필드 포커스 해제
             onTap: () {
@@ -804,8 +845,8 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
                             decoration: BoxDecoration(
                                 color: Colors.white,
                                 borderRadius: BorderRadius.circular(15)),
-                            child: StreamBuilder<QuerySnapshot>(
-                              stream: _getSortedQuery().snapshots(),
+                            child: FutureBuilder<QuerySnapshot>(
+                              future: _getSortedQuery().get(),
                               builder: (context, snapshot) {
                                 if (snapshot.hasError) {
                                   return Center(
@@ -813,7 +854,7 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
                                 }
                                 if (snapshot.connectionState ==
                                     ConnectionState.waiting) {
-                                  return Center(child: Text(''));
+                                  return Center(child: CircularProgressIndicator());
                                 }
                                 if (snapshot.data == null ||
                                     snapshot.data!.docs.isEmpty) {
@@ -822,14 +863,14 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
 
                                 // 클라이언트에서 정렬 처리
                                 List<DocumentSnapshot> sortedDocs =
-                                    List.from(snapshot.data!.docs);
+                                List.from(snapshot.data!.docs);
 
                                 if (_currentSortOption == SortOption.time) {
                                   sortedDocs.sort((a, b) {
                                     final aData =
-                                        a.data() as Map<String, dynamic>;
+                                    a.data() as Map<String, dynamic>;
                                     final bData =
-                                        b.data() as Map<String, dynamic>;
+                                    b.data() as Map<String, dynamic>;
                                     final aTime = aData['time'] ?? 0;
                                     final bTime = bData['time'] ?? 0;
                                     return bTime.compareTo(aTime); // 내림차순 정렬
@@ -841,13 +882,13 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
                                   // 날짜로 정렬
                                   sortedDocs.sort((a, b) {
                                     final aData =
-                                        a.data() as Map<String, dynamic>;
+                                    a.data() as Map<String, dynamic>;
                                     final bData =
-                                        b.data() as Map<String, dynamic>;
+                                    b.data() as Map<String, dynamic>;
                                     final aDate = aData['date'] ?? '';
                                     final bDate = bData['date'] ?? '';
                                     final compare =
-                                        bDate.compareTo(aDate); // 날짜 내림차순
+                                    bDate.compareTo(aDate); // 날짜 내림차순
                                     if (compare == 0) {
                                       // 같은 날짜면 시간으로 정렬
                                       final aTime = aData['timeOfDay'] ?? '';
@@ -858,11 +899,11 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
                                   });
 
                                   Map<String, List<DocumentSnapshot>>
-                                      groupedByDate = {};
+                                  groupedByDate = {};
 
                                   for (var doc in sortedDocs) {
                                     Map<String, dynamic> data =
-                                        doc.data() as Map<String, dynamic>;
+                                    doc.data() as Map<String, dynamic>;
                                     String date = data['date'] ?? '날짜 없음';
 
                                     if (!groupedByDate.containsKey(date)) {
@@ -881,11 +922,11 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
                                     itemBuilder: (context, index) {
                                       String date = sortedDates[index];
                                       List<DocumentSnapshot> docs =
-                                          groupedByDate[date]!;
+                                      groupedByDate[date]!;
 
                                       return Column(
                                         crossAxisAlignment:
-                                            CrossAxisAlignment.start,
+                                        CrossAxisAlignment.start,
                                         children: [
                                           Padding(
                                             padding: const EdgeInsets.symmetric(
@@ -904,7 +945,7 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
                                                 .data() as Map<String, dynamic>;
                                             return InkWell(
                                               highlightColor:
-                                                  Colors.transparent,
+                                              Colors.transparent,
                                               hoverColor: Colors.transparent,
                                               splashColor: Colors.transparent,
                                               onTap: () {
@@ -922,7 +963,7 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
                                                     data['reference'] ?? ''),
                                                 subtitle: Column(
                                                   crossAxisAlignment:
-                                                      CrossAxisAlignment.start,
+                                                  CrossAxisAlignment.start,
                                                   children: [
                                                     Text(data['meetingData'] ??
                                                         ''),
@@ -965,7 +1006,7 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
                                           title: Text(data['reference'] ?? ''),
                                           subtitle: Column(
                                             crossAxisAlignment:
-                                                CrossAxisAlignment.start,
+                                            CrossAxisAlignment.start,
                                             children: [
                                               Text(data['meetingData'] ?? ''),
                                               Text(
@@ -1007,7 +1048,7 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
                             children: [
                               Padding(
                                   padding:
-                                      EdgeInsets.symmetric(horizontal: 30)),
+                                  EdgeInsets.symmetric(horizontal: 30)),
                               // 제목과 부제목 입력 필드 유지
                               Expanded(
                                 child: TextField(
@@ -1040,7 +1081,7 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
                                 builder: (context, value, child) {
                                   final minutes = value ~/ 60;
                                   final seconds =
-                                      (value % 60).toString().padLeft(2, '0');
+                                  (value % 60).toString().padLeft(2, '0');
                                   return Text(
                                     '$minutes:$seconds',
                                     style: TextStyle(
@@ -1116,7 +1157,7 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
                                         icon: Icon(Icons.cancel,
                                             color: Colors.grey),
                                         onPressed:
-                                            value > 0 ? _resetTimer : null,
+                                        value > 0 ? _resetTimer : null,
                                       );
                                     },
                                   ),
@@ -1129,7 +1170,7 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
                     ),
                   )
                 else
-                  // 일반 화면에서는 기존 스타일 유지
+                // 일반 화면에서는 기존 스타일 유지
                   Positioned(
                     bottom: isSmallScreen ? null : 20,
                     left: 20,
@@ -1144,13 +1185,13 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
                           boxShadow: isSmallScreen
                               ? null
                               : [
-                                  BoxShadow(
-                                    color: Colors.grey.withOpacity(0.7),
-                                    blurRadius: 5.0,
-                                    spreadRadius: 1.0,
-                                    offset: Offset(5, 7),
-                                  )
-                                ],
+                            BoxShadow(
+                              color: Colors.grey.withOpacity(0.7),
+                              blurRadius: 5.0,
+                              spreadRadius: 1.0,
+                              offset: Offset(5, 7),
+                            )
+                          ],
                         ),
                         child: Padding(
                           padding: EdgeInsets.symmetric(horizontal: 10),
@@ -1203,7 +1244,7 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
                                 builder: (context, value, child) {
                                   final minutes = value ~/ 60;
                                   final seconds =
-                                      (value % 60).toString().padLeft(2, '0');
+                                  (value % 60).toString().padLeft(2, '0');
                                   return Text(
                                     '$minutes:$seconds',
                                     style: TextStyle(
@@ -1279,7 +1320,7 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
                                         icon: Icon(Icons.cancel,
                                             color: Colors.grey),
                                         onPressed:
-                                            value > 0 ? _resetTimer : null,
+                                        value > 0 ? _resetTimer : null,
                                       );
                                     },
                                   ),
