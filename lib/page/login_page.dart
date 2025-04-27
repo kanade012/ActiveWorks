@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
+import 'package:window_manager/window_manager.dart';
 
 class AuthPage extends StatefulWidget {
   @override
@@ -96,6 +97,11 @@ class _AuthPageState extends State<AuthPage> {
                         text: _isLogin ? '회원가입으로 이동' : '로그인으로 이동',
                         onPressed: _toggleAuthMode,
                       ),
+                      SizedBox(height: 24),
+                      _buildButton(
+                        text: '종료',
+                        onPressed: _exitApp,
+                      ),
                     ],
                   ),
           ],
@@ -138,6 +144,10 @@ class _AuthPageState extends State<AuthPage> {
     setState(() {
       _isLogin = !_isLogin;
     });
+  }
+  
+  void _exitApp() async {
+    await windowManager.destroy();
   }
 
   Future<void> _handleSubmit() async {
