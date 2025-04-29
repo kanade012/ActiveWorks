@@ -58,7 +58,7 @@ class _GroupDetailPageState extends State<GroupDetailPage>
   String? _teamMemberFilter; // 팀원 필터링용 (null이면 필터링 안함)
   
   // 회고 표시 여부
-  bool _showReflectionPanel = false;
+  bool _showReflectionPanel = true; // 항상 표시되도록 true로 변경
   
   // 인증 서비스
   final AuthService _authService = AuthService();
@@ -1006,7 +1006,7 @@ class _GroupDetailPageState extends State<GroupDetailPage>
                                               IconButton(
                                                 icon: Icon(Icons.note_alt_outlined, size: 20),
                                                 tooltip: '회고 토글',
-                                                onPressed: _toggleReflectionPanel,
+                                                onPressed: null, // 토글 기능 비활성화
                                               ),
                                             ],
                                           ),
@@ -1053,266 +1053,258 @@ class _GroupDetailPageState extends State<GroupDetailPage>
                                   ),
                                 ),
                                 
-                                // 회고 패널 (토글 가능)
-                                if (_showReflectionPanel)
-                                  Container(
-                                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Row(
-                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                          children: [
-                                            Text(
-                                              '오늘의 회고',
-                                              style: TextStyle(
-                                                fontWeight: FontWeight.bold,
-                                                fontSize: 16,
-                                              ),
-                                            ),
-                                            Row(
-                                              children: [
-                                                IconButton(
-                                                  icon: Icon(Icons.history, size: 20),
-                                                  tooltip: '지난 회고 보기',
-                                                  onPressed: _showPastReflections,
-                                                ),
-                                                IconButton(
-                                                  icon: Icon(Icons.save, size: 20),
-                                                  tooltip: '회고 저장',
-                                                  onPressed: () {
-                                                    _saveTodayReflection(_reflectionController.text);
-                                                  },
-                                                ),
-                                              ],
-                                            ),
-                                          ],
-                                        ),
-                                        
-                                        // 별점 입력 UI 추가
-                                        Padding(
-                                          padding: const EdgeInsets.symmetric(vertical: 8.0),
-                                          child: Row(
-                                            children: [
-                                              Text('별점: ', style: TextStyle(fontWeight: FontWeight.bold)),
-                                              _buildRatingBar(_reflectionRating.toDouble(), false),
-                                            ],
-                                          ),
-                                        ),
-                                        
-                                        SizedBox(height: 8),
-                                        Container(
-                                          height: 100,
-                                          padding: EdgeInsets.symmetric(horizontal: 12),
-                                          decoration: BoxDecoration(
-                                            border: Border.all(color: Colors.grey.shade300),
-                                            borderRadius: BorderRadius.circular(8),
-                                          ),
-                                          child: TextField(
-                                            controller: _reflectionController,
-                                            focusNode: _reflectionFocusNode,
-                                            maxLines: 4,
-                                            decoration: InputDecoration(
-                                              hintText: '오늘의 작업에 대한 회고를 작성하세요...',
-                                              border: InputBorder.none,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                
                                 // 구분선
                                 Divider(),
                                 
                                 // 기록 목록
                                 Expanded(
-                                  child: StreamBuilder<QuerySnapshot>(
-                                    stream: _getSortedQuery().snapshots(),
-                                    builder: (context, snapshot) {
-                                      if (snapshot.hasError) {
-                                        return Center(
-                                            child: Text('데이터를 불러오는 중 오류가 발생했습니다.'));
-                                      }
-                                      if (snapshot.connectionState ==
-                                          ConnectionState.waiting) {
-                                        return Center(
-                                            child: CircularProgressIndicator());
-                                      }
-                                      if (snapshot.data == null ||
-                                          snapshot.data!.docs.isEmpty) {
-                                        return Center(child: Text('저장된 기록이 없습니다.'));
-                                      }
+                                  child: SingleChildScrollView(
+                                    child: Column(
+                                      children: [
+                                        // 기록 목록 영역 - 고정된 크기로 설정하고 내부에서만 스크롤
+                                        Container(
+                                          height: 300, // 고정 높이 설정
+                                          child: StreamBuilder<QuerySnapshot>(
+                                            stream: _getSortedQuery().snapshots(),
+                                            builder: (context, snapshot) {
+                                              if (snapshot.hasError) {
+                                                return Center(
+                                                    child: Text('데이터를 불러오는 중 오류가 발생했습니다.'));
+                                              }
+                                              if (snapshot.connectionState ==
+                                                  ConnectionState.waiting) {
+                                                return Center(
+                                                    child: CircularProgressIndicator());
+                                              }
+                                              if (snapshot.data == null ||
+                                                  snapshot.data!.docs.isEmpty) {
+                                                return Center(child: Text('저장된 기록이 없습니다.'));
+                                              }
 
-                                      // 클라이언트에서 정렬 처리
-                                      List<DocumentSnapshot> sortedDocs =
-                                          List.from(snapshot.data!.docs);
+                                              // 클라이언트에서 정렬 처리
+                                              List<DocumentSnapshot> sortedDocs =
+                                                  List.from(snapshot.data!.docs);
 
-                                      if (_currentSortOption == SortOption.time) {
-                                        sortedDocs.sort((a, b) {
-                                          final aData =
-                                              a.data() as Map<String, dynamic>;
-                                          final bData =
-                                              b.data() as Map<String, dynamic>;
-                                          final aTime = aData['time'] ?? 0;
-                                          final bTime = bData['time'] ?? 0;
-                                          return bTime.compareTo(aTime); // 내림차순 정렬
-                                        });
-                                      }
+                                              if (_currentSortOption == SortOption.time) {
+                                                sortedDocs.sort((a, b) {
+                                                  final aData =
+                                                      a.data() as Map<String, dynamic>;
+                                                  final bData =
+                                                      b.data() as Map<String, dynamic>;
+                                                  final aTime = aData['time'] ?? 0;
+                                                  final bTime = bData['time'] ?? 0;
+                                                  return bTime.compareTo(aTime); // 내림차순 정렬
+                                                });
+                                              }
 
-                                      // 현재 정렬이 날짜별인 경우 날짜별로 그룹화
-                                      if (_currentSortOption == SortOption.date) {
-                                        // 날짜로 정렬
-                                        sortedDocs.sort((a, b) {
-                                          final aData =
-                                              a.data() as Map<String, dynamic>;
-                                          final bData =
-                                              b.data() as Map<String, dynamic>;
-                                          final aDate = aData['date'] ?? '';
-                                          final bDate = bData['date'] ?? '';
-                                          final compare =
-                                              bDate.compareTo(aDate); // 날짜 내림차순
-                                          if (compare == 0) {
-                                            // 같은 날짜면 시간으로 정렬
-                                            final aTime = aData['timeOfDay'] ?? '';
-                                            final bTime = bData['timeOfDay'] ?? '';
-                                            return bTime.compareTo(aTime);
-                                          }
-                                          return compare;
-                                        });
+                                              // 현재 정렬이 날짜별인 경우 날짜별로 그룹화
+                                              if (_currentSortOption == SortOption.date) {
+                                                // 날짜로 정렬
+                                                sortedDocs.sort((a, b) {
+                                                  final aData =
+                                                      a.data() as Map<String, dynamic>;
+                                                  final bData =
+                                                      b.data() as Map<String, dynamic>;
+                                                  final aDate = aData['date'] ?? '';
+                                                  final bDate = bData['date'] ?? '';
+                                                  final compare =
+                                                      bDate.compareTo(aDate); // 날짜 내림차순
+                                                  if (compare == 0) {
+                                                    // 같은 날짜면 시간으로 정렬
+                                                    final aTime = aData['timeOfDay'] ?? '';
+                                                    final bTime = bData['timeOfDay'] ?? '';
+                                                    return bTime.compareTo(aTime);
+                                                  }
+                                                  return compare;
+                                                });
 
-                                        Map<String, List<DocumentSnapshot>>
-                                            groupedByDate = {};
+                                                Map<String, List<DocumentSnapshot>>
+                                                    groupedByDate = {};
 
-                                        for (var doc in sortedDocs) {
-                                          Map<String, dynamic> data =
-                                              doc.data() as Map<String, dynamic>;
-                                          String date = data['date'] ?? '날짜 없음';
+                                                for (var doc in sortedDocs) {
+                                                  Map<String, dynamic> data =
+                                                      doc.data() as Map<String, dynamic>;
+                                                  String date = data['date'] ?? '날짜 없음';
 
-                                          if (!groupedByDate.containsKey(date)) {
-                                            groupedByDate[date] = [];
-                                          }
-                                          groupedByDate[date]!.add(doc);
-                                        }
+                                                  if (!groupedByDate.containsKey(date)) {
+                                                    groupedByDate[date] = [];
+                                                  }
+                                                  groupedByDate[date]!.add(doc);
+                                                }
 
-                                        List<String> sortedDates = groupedByDate.keys
-                                            .toList()
-                                          ..sort((a, b) =>
-                                              b.compareTo(a)); // 최신 날짜가 먼저 오도록
+                                                List<String> sortedDates = groupedByDate.keys
+                                                    .toList()
+                                                  ..sort((a, b) =>
+                                                      b.compareTo(a));
 
-                                        return ListView.builder(
-                                          itemCount: sortedDates.length,
-                                          itemBuilder: (context, index) {
-                                            String date = sortedDates[index];
-                                            List<DocumentSnapshot> docs =
-                                                groupedByDate[date]!;
+                                                // 스크롤 가능한 리스트뷰 사용
+                                                return ListView.builder(
+                                                  itemCount: sortedDates.length,
+                                                  itemBuilder: (context, index) {
+                                                    String date = sortedDates[index];
+                                                    List<DocumentSnapshot> docs = groupedByDate[date]!;
 
-                                            return Column(
-                                              crossAxisAlignment:
-                                                  CrossAxisAlignment.start,
-                                              children: [
-                                                Padding(
-                                                  padding: const EdgeInsets.symmetric(
-                                                      vertical: 8.0,
-                                                      horizontal: 16.0),
-                                                  child: Text(
-                                                    date,
+                                                    return Column(
+                                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                                      children: [
+                                                        Padding(
+                                                          padding: const EdgeInsets.symmetric(
+                                                              vertical: 8.0,
+                                                              horizontal: 16.0),
+                                                          child: Text(
+                                                            date,
+                                                            style: TextStyle(
+                                                              fontWeight: FontWeight.bold,
+                                                              fontSize: 16,
+                                                            ),
+                                                          ),
+                                                        ),
+                                                        ...docs.map((doc) {
+                                                          Map<String, dynamic> data = doc
+                                                              .data() as Map<String, dynamic>;
+                                                          return InkWell(
+                                                            highlightColor: Colors.transparent,
+                                                            hoverColor: Colors.transparent,
+                                                            splashColor: Colors.transparent,
+                                                            onTap: () {
+                                                              _showEditDialog(
+                                                                context,
+                                                                doc.id,
+                                                                data['reference'],
+                                                                data['meetingData'],
+                                                                date: data['date'],
+                                                                timeOfDay: data['timeOfDay'],
+                                                              );
+                                                            },
+                                                            child: ListTile(
+                                                              title: Text(data['reference'] ?? ''),
+                                                              subtitle: Column(
+                                                                crossAxisAlignment: CrossAxisAlignment.start,
+                                                                children: [
+                                                                  Text(data['meetingData'] ?? ''),
+                                                                  Text('날짜: ${data['date'] ?? ''} ${data['timeOfDay'] ?? ''}'),
+                                                                ],
+                                                              ),
+                                                              trailing: Text('${data['time'] ~/ 60}:${(data['time'] % 60).toString().padLeft(2, '0')}'),
+                                                            ),
+                                                          );
+                                                        }).toList(),
+                                                        Divider(),
+                                                      ],
+                                                    );
+                                                  },
+                                                );
+                                              }
+
+                                              // 기본 목록 표시
+                                              return ListView.builder(
+                                                itemCount: sortedDocs.length,
+                                                itemBuilder: (context, index) {
+                                                  DocumentSnapshot document = sortedDocs[index];
+                                                  Map<String, dynamic> data = document.data() as Map<String, dynamic>;
+                                                  return InkWell(
+                                                    highlightColor: Colors.transparent,
+                                                    hoverColor: Colors.transparent,
+                                                    splashColor: Colors.transparent,
+                                                    onTap: () {
+                                                      _showEditDialog(
+                                                        context,
+                                                        document.id,
+                                                        data['reference'],
+                                                        data['meetingData'],
+                                                        date: data['date'],
+                                                        timeOfDay: data['timeOfDay'],
+                                                      );
+                                                    },
+                                                    child: ListTile(
+                                                      title: Text(data['reference'] ?? ''),
+                                                      subtitle: Column(
+                                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                                        children: [
+                                                          Text(data['meetingData'] ?? ''),
+                                                          Text('날짜: ${data['date'] ?? ''} ${data['timeOfDay'] ?? ''}'),
+                                                        ],
+                                                      ),
+                                                      trailing: Text('${data['time'] ~/ 60}:${(data['time'] % 60).toString().padLeft(2, '0')}'),
+                                                    ),
+                                                  );
+                                                },
+                                              );
+                                            },
+                                          ),
+                                        ),
+                                        
+                                        // 회고 패널
+                                        SizedBox(height: 16),
+                                        Container(
+                                          padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Row(
+                                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                                children: [
+                                                  Text(
+                                                    '오늘의 회고',
                                                     style: TextStyle(
                                                       fontWeight: FontWeight.bold,
                                                       fontSize: 16,
                                                     ),
                                                   ),
+                                                  Row(
+                                                    children: [
+                                                      IconButton(
+                                                        icon: Icon(Icons.history, size: 20),
+                                                        tooltip: '지난 회고 보기',
+                                                        onPressed: _showPastReflections,
+                                                      ),
+                                                      IconButton(
+                                                        icon: Icon(Icons.save, size: 20),
+                                                        tooltip: '회고 저장',
+                                                        onPressed: () {
+                                                          _saveTodayReflection(_reflectionController.text);
+                                                        },
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ],
+                                              ),
+                                              
+                                              // 별점 입력 UI 추가
+                                              Padding(
+                                                padding: const EdgeInsets.symmetric(vertical: 8.0),
+                                                child: Row(
+                                                  children: [
+                                                    Text('별점: ', style: TextStyle(fontWeight: FontWeight.bold)),
+                                                    _buildRatingBar(_reflectionRating.toDouble(), false),
+                                                  ],
                                                 ),
-                                                ...docs.map((doc) =>
-                                                    _buildListTile(doc, _user)),
-                                                Divider(),
-                                              ],
-                                            );
-                                          },
-                                        );
-                                      }
-                                      // 현재 정렬이 사람별인 경우 사람별로 그룹화
-                                      else if (_currentSortOption ==
-                                          SortOption.person) {
-                                        // 사람별로 정렬
-                                        sortedDocs.sort((a, b) {
-                                          final aData =
-                                              a.data() as Map<String, dynamic>;
-                                          final bData =
-                                              b.data() as Map<String, dynamic>;
-                                          final aEmail = aData['userEmail'] ?? '';
-                                          final bEmail = bData['userEmail'] ?? '';
-                                          final compare =
-                                              aEmail.compareTo(bEmail); // 이메일 오름차순
-                                          if (compare == 0) {
-                                            // 같은 사람이면 시간순으로 정렬
-                                            final aTime =
-                                                aData['timestamp'] ?? Timestamp.now();
-                                            final bTime =
-                                                bData['timestamp'] ?? Timestamp.now();
-                                            return bTime.compareTo(aTime); // 최신순
-                                          }
-                                          return compare;
-                                        });
-
-                                        Map<String, List<DocumentSnapshot>>
-                                            groupedByPerson = {};
-
-                                        for (var doc in sortedDocs) {
-                                          Map<String, dynamic> data =
-                                              doc.data() as Map<String, dynamic>;
-                                          String person =
-                                              data['userEmail'] ?? '알 수 없음';
-
-                                          if (!groupedByPerson.containsKey(person)) {
-                                            groupedByPerson[person] = [];
-                                          }
-                                          groupedByPerson[person]!.add(doc);
-                                        }
-
-                                        List<String> sortedPersons =
-                                            groupedByPerson.keys.toList()..sort();
-
-                                        return ListView.builder(
-                                          itemCount: sortedPersons.length,
-                                          itemBuilder: (context, index) {
-                                            String person = sortedPersons[index];
-                                            List<DocumentSnapshot> docs =
-                                                groupedByPerson[person]!;
-
-                                            return Column(
-                                              crossAxisAlignment:
-                                                  CrossAxisAlignment.start,
-                                              children: [
-                                                Padding(
-                                                  padding: const EdgeInsets.symmetric(
-                                                      vertical: 8.0,
-                                                      horizontal: 16.0),
-                                                  child: Text(
-                                                    person,
-                                                    style: TextStyle(
-                                                      fontWeight: FontWeight.bold,
-                                                      fontSize: 16,
-                                                    ),
+                                              ),
+                                              
+                                              SizedBox(height: 8),
+                                              Container(
+                                                height: 100,
+                                                padding: EdgeInsets.symmetric(horizontal: 12),
+                                                decoration: BoxDecoration(
+                                                  border: Border.all(color: Colors.grey.shade300),
+                                                  borderRadius: BorderRadius.circular(8),
+                                                ),
+                                                child: TextField(
+                                                  controller: _reflectionController,
+                                                  focusNode: _reflectionFocusNode,
+                                                  maxLines: 4,
+                                                  decoration: InputDecoration(
+                                                    hintText: '오늘의 작업에 대한 회고를 작성하세요...',
+                                                    border: InputBorder.none,
                                                   ),
                                                 ),
-                                                ...docs.map((doc) =>
-                                                    _buildListTile(doc, _user)),
-                                                Divider(),
-                                              ],
-                                            );
-                                          },
-                                        );
-                                      }
-                                      // 기본 목록 표시
-                                      else {
-                                        return ListView(
-                                          children: sortedDocs
-                                              .map((doc) => _buildListTile(doc, _user))
-                                              .toList(),
-                                        );
-                                      }
-                                    },
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        SizedBox(height: 70), // 하단 여백 추가
+                                      ],
+                                    ),
                                   ),
                                 ),
                               ],
@@ -1979,9 +1971,10 @@ class _GroupDetailPageState extends State<GroupDetailPage>
   
   // 회고 패널 토글 함수
   void _toggleReflectionPanel() {
-    setState(() {
-      _showReflectionPanel = !_showReflectionPanel;
-    });
+    // 항상 표시되므로 토글 기능 제거
+    // setState(() {
+    //   _showReflectionPanel = !_showReflectionPanel;
+    // });
   }
   
   // 과거 회고 보기
